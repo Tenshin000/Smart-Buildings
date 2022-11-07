@@ -33,11 +33,11 @@ CREATE TABLE Vano(
 	Codice_Vano INT AUTO_INCREMENT PRIMARY KEY,
     Funzione VARCHAR(50) NOT NULL,
     PuntiPerimetro INT NOT NULL,
-    AltezzaMax INT NOT NULL, # IN METRI
-	LunghezzaMax INT, # IN METRI
-    LarghezzaMax INT, # IN METRI
+    AltezzaMax FLOAT NOT NULL, # IN METRI
+	LunghezzaMax FLOAT DEFAULT NULL, # IN METRI
+    LarghezzaMax FLOAT DEFAULT NULL, # IN METRI
     Pianta INT NOT NULL,
-    Pavimentazione VARCHAR(50),
+    Pavimentazione VARCHAR(50) DEFAULT NULL,
     FOREIGN KEY(Pavimentazione) REFERENCES Piastrelle(Codice_Lotto)
 		ON DELETE NO ACTION
 		ON UPDATE CASCADE,
@@ -659,9 +659,9 @@ DELIMITER $$
 CREATE FUNCTION Controllo_Punto_Interno_Pianta(x FLOAT, y FLOAT, codice_pianta INT)
 RETURNS BOOL DETERMINISTIC
 BEGIN
-	DECLARE interno_perimetro BOOL DEFAULT TRUE;
-	DECLARE finito INT DEFAULT 0;	
-	DECLARE contatore INT DEFAULT 1;
+		DECLARE interno_perimetro BOOL DEFAULT TRUE;
+		DECLARE finito INT DEFAULT 0;
+		DECLARE contatore INT DEFAULT 1;
         DECLARE numero_punti INT DEFAULT 0;
         DECLARE x0 INT DEFAULT 0;
         DECLARE x1 INT DEFAULT 0;
@@ -846,6 +846,23 @@ BEGIN
 END $$
 DELIMITER ;
 
+# Restituisce TRUE se x è compreso tra y1 e y2 senza però uguagliare y1 o y2, altrimenti restituisce FALSE
+DROP FUNCTION IF EXISTS compreso_senza_estremi;
+DELIMITER $$
+CREATE FUNCTION compreso_senza_estremi(x FLOAT, y1 FLOAT, y2 FLOAT)
+RETURNS BOOL DETERMINISTIC
+BEGIN
+	DECLARE inter BOOL DEFAULT FALSE;
+    
+	IF
+		x BETWEEN y1 AND y2 AND x <> y1 AND x <> y2
+    THEN
+		SET inter = TRUE ;
+	END IF;
+	RETURN inter;
+END $$
+DELIMITER ;
+
 # Funzione che dato due segmenti in input, restituisce TRUE se si intersecano e FALSE altrimenti
 DROP FUNCTION IF EXISTS Intersezione;
 DELIMITER $$
@@ -855,49 +872,7 @@ BEGIN
 	DECLARE intersezione BOOL DEFAULT FALSE;
 	DECLARE m, q, _m, _q FLOAT DEFAULT 0;
 	DECLARE x_inter, y_inter FLOAT DEFAULT 0;
-	DECLARE min_x_v1, min_y_v1, min_x_v2, min_y_v2 FLOAT DEFAULT 0;
-    DECLARE max_x_v1, max_y_v1, max_x_v2, max_y_v2 FLOAT DEFAULT 0;
-
-	IF 
-		x1 < x2 
-    THEN 
-		SET min_x_v1 = x1;
-	ELSEIF 
-		x1 >= x2 
-	THEN 
-		SET max_x_v1 = x2;
-    END IF;
-
-	IF 
-		y1 < y2 
-	THEN 
-		SET min_y_v1 = y1;
-	ELSEIF 
-		y1 >= y2 
-	THEN 
-		SET max_y_v1 = y2;
-	END IF;
     
-	IF 
-		x3 < x4 
-	THEN 
-		SET min_x_v2 = x3;
-	ELSEIF
-		x3 >= x4
-    THEN
-		SET min_x_v2 = x4;
-	END IF;
-
-	IF 
-		y3 < y4 
-    THEN
-		SET min_y_v2 = y3;
-	ELSEIF
-		y3 >= y4
-    THEN 
-		SET min_y_v2 = y4;
-	END IF;
-
 	IF 
 		x1 <> x2 AND x3 <> x4
 	THEN 
@@ -912,10 +887,10 @@ BEGIN
 			SET y_inter = x_inter * m + q;
 			# Controllo che il punto appartenga ai due segmenti
 			IF 
-				x_inter BETWEEN x1 AND x3 OR x_inter BETWEEN x2 AND x3 OR x_inter BETWEEN x1 AND x4 OR x_inter BETWEEN x2 AND x4
+				compreso_senza_estremi(x_inter, x1, x2) AND Compreso_senza_estremi(x_inter, x3, x4)
             THEN
 				IF 
-					y_inter BETWEEN y1 AND y3 OR y_inter BETWEEN y2 AND y3 OR y_inter BETWEEN y1 AND y4 OR y_inter BETWEEN y2 AND y4
+					compreso_senza_estremi(y_inter, y1, y2) AND Compreso_senza_estremi(y_inter, y3, y4)
 				THEN
 					SET intersezione = TRUE;
 				END IF;
@@ -925,14 +900,14 @@ BEGIN
 		x1 <> x2 AND x3 = x4
 	THEN
 		SET m = (y2 - y1) / (x2 - x1) ;
-		SET q = y1 - M * x1 ;
+		SET q = y1 - m * x1 ;
 		SET x_inter = x3;
-		SET y_inter = M * x3 + Q;
+		SET y_inter = m * x3 + q;
 		IF 
-			x_inter BETWEEN x1 AND x3 OR x_inter BETWEEN x2 AND x3 OR x_inter BETWEEN x1 AND x4 OR x_inter BETWEEN x2 AND x4
+			compreso_senza_estremi(x_inter, x1, x2)
         THEN
 			IF 
-				y_inter BETWEEN y1 AND y3 OR y_inter BETWEEN y2 AND y3 OR y_inter BETWEEN y1 AND y4 OR y_inter BETWEEN y2 AND y4
+				compreso_senza_estremi(y_inter, y1, y2) AND Compreso_senza_estremi(y_inter, y3, y4)
 			THEN
 					SET intersezione = TRUE;
 			END IF;
@@ -945,10 +920,10 @@ BEGIN
 		SET x_inter = x1;
 		SET y_inter = m * x1 + q;
 		IF 
-			x_inter BETWEEN x1 AND x3 OR x_inter BETWEEN x2 AND x3 OR x_inter BETWEEN x1 AND x4 OR x_inter BETWEEN x2 AND x4
+			compreso_senza_estremi(x_inter, x3, x4)
 		THEN
 			IF 
-				y_inter BETWEEN y1 AND y3 OR y_inter BETWEEN y2 AND y3 OR y_inter BETWEEN y1 AND y4 OR y_inter BETWEEN y2 AND y4
+				compreso_senza_estremi(y_inter, y1, y2) AND Compreso_senza_estremi(y_inter, y3, y4)
 			THEN
 				SET intersezione = TRUE;
 			END IF;
@@ -958,135 +933,175 @@ BEGIN
 END $$
 DELIMITER ;
 
-DROP TRIGGER IF EXISTS Collocazione_Pianta
+# Controlla che la planimetria sia fattibile
+DROP TRIGGER IF EXISTS CollocazionePianta;
 DELIMITER $$
-CREATE TRIGGER Collocazione_Pianta
+CREATE TRIGGER CollocazionePianta
 BEFORE INSERT ON Vertice
+FOR EACH ROW
 BEGIN
-DECLARE Quanti_vertici INT DEFAULT 0;
-DECLARE fintito INT DEFAULT 0;
-DECLARE Punti_pianta INT DEFAULT 0;
-DECLARE ultimo_x, ultimoy FLOAT DEFAULT 0;
+	DECLARE quanti_vertici INT DEFAULT 0;
+	DECLARE finito INT DEFAULT 0;
+	DECLARE ultimo_x, ultimo_y FLOAT DEFAULT 0;
+	DECLARE punti_pianta INT DEFAULT 0;
+    DECLARE v3, v4, x3, y3, x4 ,y4 FLOAT DEFAULT 0;
+    
+    
+    DECLARE muri CURSOR FOR
+			SELECT M.V1, M.V2, V1.X, V1.Y, V2.X, V2.Y
+			FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice 
+			WHERE M.Pianta = NEW.Pianta AND V1.Pianta = NEW.Pianta AND V2.Pianta = NEW.Pianta;
+	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
 
-DECLARE Punti_pianta INT DEFAULT 0;DECLARE muri CURSOR FOR
-		SELECT M.V1, M.V2, V1.X, V1.Y, V2.X, V2.Y
-		FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice 
-		WHERE M.Pianta = NEW.Pianta AND V1.Pianta = NEW.Pianta AND V2.Pianta = NEW.Pianta;
-		
-DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
-
-SET Quanti_vertici =
-(
-	SELECT COUNT(*)
-	FROM Vertice
-	WHERE Pianta = NEW.Pianta
-);
-
-SET Punti_pianta =
-(
-	SELECT PuntiPerimetro FROM Pianta WHERE CodicePianta = NEW.Pianta
-);
-
-SET ultimo_x =
-(
-	SELECT x
-	FROM Vertice
-	WHERE Pianta = NEW.Pianta AND Numero = NEW.Numero - 1 ;
-);
-
-SET ultimo_y =
-(
-	SELECT y
-	FROM Vertice
-	WHERE Pianta = NEW.Pianta AND Numero = NEW.Numero - 1 ;
-);
-
-IF Quanti_vertici < Punti_pianta - 1 AND NEW.Numero <> 1
-THEN
-(
-	OPEN muri;
-	ciclo: LOOP
-	FETCH INTO v3, v4, x3, y3, x4 ,y4;
-	IF Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
-	THEN SIGNAL SQL STATE '45000' SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!' 
-	IF finito = 1
-	THEN END LOOP;
-)
-END IF;
-
-IF Quanti_vertici = Punti_pianta - 1 AND NEW.Numero <> 1
-THEN
-(
-	OPEN muri;
-	ciclo: LOOP
-	FETCH INTO v3, v4, x3, y3, x4 ,y4;
-	IF Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
-	THEN SIGNAL SQL STATE '45000' SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!' 
-	IF finito = 1
-	THEN 
+	SET quanti_vertici =
 	(
-		SET ultimo_x =
-		(
-			SELECT X
-			FROM Vertice
-			WHERE Pianta = NEW.Pianta AND Numero = ( SELECT MIN(_V.Numero) FROM Vertice _V WHERE _V.Pianta = NEW.Pianta
-		);
-		
-		SET ultimo_y =
-		(
-			SELECT Y
-			FROM Vertice
-			WHERE Pianta = NEW.Pianta AND Numero = ( SELECT MIN(_V.Numero) FROM Vertice _V WHERE _V.Pianta = NEW.Pianta
-		);
-		
-		IF Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
-		THEN SIGNAL SQL STATE '45000' SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!
-		
-		END LOOP;
-	)
-)
-END IF;
+		SELECT COUNT(*)
+		FROM Vertice
+		WHERE Pianta = NEW.Pianta
+	);
 
+	SET punti_pianta =
+	(
+		SELECT PuntiPerimetro 
+        FROM Pianta 
+        WHERE Codice_Pianta = NEW.Pianta
+	);
+
+	SET ultimo_x =
+	(
+		SELECT X
+		FROM Vertice
+		WHERE Pianta = NEW.Pianta AND Numero_Vertice = NEW.Numero_Vertice - 1
+	);
+
+	SET ultimo_y =
+	(
+		SELECT Y
+		FROM Vertice
+		WHERE Pianta = NEW.Pianta AND Numero_Vertice = NEW.Numero_Vertice - 1
+	);
+
+	IF quanti_vertici < punti_pianta - 1 AND NEW.Numero_Vertice <> 1
+	THEN
+		OPEN muri;
+		ciclo: LOOP
+		FETCH muri INTO v3, v4, x3, y3, x4 ,y4;
+		IF 
+			Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
+		THEN 
+			SIGNAL SQLSTATE '45000' 
+			SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
+		END IF;
+        
+		IF 
+			finito = 1
+		THEN 
+			LEAVE ciclo;
+		END IF;
+		END LOOP;
+	END IF;
+
+	IF 
+		quanti_vertici = punti_pianta - 1 AND NEW.Numero_Vertice <> 1
+	THEN
+		OPEN muri;
+		ciclo: LOOP
+		FETCH muri INTO v3, v4, x3, y3, x4 ,y4;
+		IF 
+			Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
+		THEN 
+			SIGNAL SQLSTATE '45000' 
+            SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
+		END IF;
+        
+		IF 
+			finito = 1
+		THEN 
+			SET ultimo_x =
+			(
+				SELECT X
+				FROM Vertice
+				WHERE Pianta = NEW.Pianta AND Numero_Vertice = 1
+			);
+			
+			SET ultimo_y =
+			(
+				SELECT Y
+				FROM Vertice
+				WHERE Pianta = NEW.Pianta AND Numero_Vertice = 1
+			);
+            
+			IF 
+				Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
+			THEN 
+				SIGNAL SQLSTATE '45000' 
+                SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
+			END IF;
+            
+			LEAVE ciclo;
+		END IF;
+		END LOOP;
+	END IF;
 END $$
 DELIMITER ;
 
-DROP TRIGGER IF EXISTS Creazione_muri_pianta
+# Man mano che vengono inseriti i vertici si vengono a formare anche i muri della pianta
+DROP TRIGGER IF EXISTS CreazioneMuriPianta;
 DELIMITER $$
-CREATE TRIGGER Creazione_muri_pianta
+CREATE TRIGGER CreazioneMuriPianta
 AFTER INSERT ON Vertice
+FOR EACH ROW
 BEGIN
 
-DECLARE Ultimo INT DEFAULT 0;
-DECLARE Quanti_vertici INT DEFAULT 0;
-DECLARE Punti_pianta INT DEFAULT 0;
+DECLARE ultimo INT DEFAULT 0;
+DECLARE quanti_vertici INT DEFAULT 0;
+DECLARE punti_pianta INT DEFAULT 0;
 
 # INSERIRE UN IF CHE CONTROLLA CHE IL VERTICE INSERITO NON SIA IL PRIMO
 
-SET Quanti_vertici =
-(
-	SELECT COUNT(*)
-	FROM Vertice
-	WHERE Pianta = NEW.Pianta
-);
+	SET quanti_vertici =
+	(
+		SELECT COUNT(*)
+		FROM Vertice
+		WHERE Pianta = NEW.Pianta
+	);
 
-SET Punti_pianta =
-(
-	SELECT PuntiPerimetro FROM Pianta WHERE CodicePianta = NEW.Pianta
-);
+	SET punti_pianta =
+	(
+		SELECT PuntiPerimetro 
+        FROM Pianta 
+        WHERE Codice_Pianta = NEW.Pianta
+	);
 
-IF Quanti_vertici = Punti_pianta - 1 AND NEW.Numero <> 1
-SET Ultimo =
-(
-	SELECT Numero
-	FROM Vertice
-	WHERE Numero = NEW.Numero - 1 ;
-)
+	
+	SET ultimo =
+		(
+			SELECT Numero_Vertice
+			FROM Vertice
+			WHERE Numero_Vertice = NEW.Numero_Vertice - 1 
+		);
 
-INSERT ON Muro(FALSE, Ultimo, NEW.Numero, NEW.Pianta)
-
+	IF 
+		quanti_vertici < punti_pianta AND NEW.Numero_Vertice <> 1
+	THEN
+		INSERT INTO Muro(Esterno, V1, V2, Pianta)
+        VALUES (TRUE, Ultimo, NEW.Numero_Vertice, NEW.Pianta);
+	ELSEIF
+		quanti_vertici = punti_pianta AND NEW.Numero_Vertice <> 1
+	THEN
+		INSERT INTO Muro(Esterno, V1, V2, Pianta)
+        VALUES (TRUE, Ultimo, NEW.Numero_Vertice, NEW.Pianta);
+        SET ultimo=
+			(
+				SELECT Numero_Vertice
+				FROM Vertice
+				WHERE Pianta = NEW.Pianta AND Numero_Vertice = 1
+			);
+		INSERT INTO Muro(Esterno, V1, V2, Pianta)
+        VALUES (TRUE, NEW.Numero_Vertice, Ultimo, NEW.Pianta);
+	END IF;
 END $$
 DELIMITER ;
-
 
 # Questa funzione prende come input le coordinate (x;y) di un vertice e il codice della pianta e vede se è all'interno di un muro
 DROP FUNCTION IF EXISTS Controllo_Punto_Su_Muro;
@@ -1094,10 +1109,9 @@ DELIMITER $$
 CREATE FUNCTION Controllo_Punto_Su_Muro(x FLOAT, y FLOAT, codice_pianta INT)
 RETURNS BOOL DETERMINISTIC
 BEGIN
-
-	DECLARE interno_pianta BOOL DEFAULT TRUE;
-	DECLARE finito INT DEFAULT 0;
-	DECLARE contatore INT DEFAULT 1;
+		DECLARE interno_pianta BOOL DEFAULT TRUE;
+		DECLARE finito INT DEFAULT 0;
+		DECLARE contatore INT DEFAULT 1;
         DECLARE numero_punti INT DEFAULT 0;
         DECLARE x0 INT DEFAULT 0;
         DECLARE x1 INT DEFAULT 0;
@@ -1545,7 +1559,7 @@ BEGIN
     END IF;
     
     IF
-		NumeroPiano < -1
+		NEw.NumeroPiano < -1
 	THEN
 		SIGNAL SQLSTATE '45000'
 		SET MESSAGE_TEXT = 'Impossibile inserire! Il numero del Piano deve essere maggiore o uguale a -1.';
@@ -1568,7 +1582,7 @@ BEGIN
     END IF;
     
     IF
-		NumeroPiano < -1
+		NEw.NumeroPiano < -1
 	THEN
 		SIGNAL SQLSTATE '45000'
 		SET MESSAGE_TEXT = 'Impossibile aggiornare! Il numero del Piano deve essere maggiore o uguale a 0.';
@@ -1631,7 +1645,7 @@ FOR EACH ROW
 BEGIN  
 	DECLARE maxVertice INT DEFAULT 0;
     
-    SET maxVertice = (SELECT MAX(V.Numero_Vertice)
+    SET maxVertice = (SELECT IFNULL(MAX(V.Numero_Vertice), 0)
 					  FROM Vertice V
                       WHERE V.Pianta = NEW.Pianta);
 	IF    
@@ -1658,60 +1672,60 @@ BEGIN
 	DECLARE vani CURSOR FOR 
 		SELECT DISTINCT(Vano)
 		FROM PosizionamentoVano
-		WHERE Pianta = OLD.Pianta AND Numero = OLD.numero;
+		WHERE Pianta = OLD.Pianta AND Numero_Vertice = OLD.Numero_Vertice;
     
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
 
 	SET punti_pianta =
 	(
-		SELECT PuntiDelPerimetro
+		SELECT PuntiPerimetro
 		FROM Pianta
 		WHERE Codice = OLD.Pianta
 	);
 		
 	IF  
-		punti_pianta >= OLD.numero 
+		punti_pianta >= OLD.Numero_Vertice
 	THEN
 		DELETE FROM PosizionamentoVano
 		WHERE Pianta = OLD.Pianta;
 		
 		DELETE FROM Muro
-		WHERE Pianta = OLD.Pianta AND ( V1 >= OLD.numero OR V2 >= OLD.numero );
+		WHERE Pianta = OLD.Pianta AND ( V1 >= OLD.Numero_Vertice OR V2 >= OLD.Numero_Vertice );
 
 		DELETE FROM Vertice
-		WHERE Pianta = OLD.Pianta AND Numero > OLD.numero;
+		WHERE Pianta = OLD.Pianta AND Numero_Vertice > OLD.Numero_Vertice;
 	ELSEIF
-		punti_pianta < OLD.numero 
+		punti_pianta < OLD.Numero_Vertice
 	THEN
 		OPEN vani
 		ciclo: LOOP
 		FETCH vani INTO vano_tmp
 
 		DELETE FROM Muro M
-		WHERE Pianta = OLD.Pianta AND ( M.V1 >= OLD.numero OR M.V2 >= OLD.Numero ) 
+		WHERE Pianta = OLD.Pianta AND ( M.V1 >= OLD.Numero_Vertice OR M.V2 >= OLD.Numero_Vertice ) 
 		AND EXISTS
 		(
 			SELECT *
 			FROM PosizionamentoVano P
-			WHERE P.Vano = vano_tmp AND ( Numero = M.21 OR Numero = M.V2 )
+			WHERE P.Vano = vano_tmp AND ( P.Numero_Vertice = M.V1 OR P.Numero_Vertice = M.V2 )
 		)
 
 		DELETE FROM Vertice V
-		WHERE V.Pianta = OLD.Pianta AND V.Numero > OLD.Numero AND 
+		WHERE V.Pianta = OLD.Pianta AND V.Numero_Vertice > OLD.Numero_Vertice AND 
 		(
 			SELECT COUNT(*)
 			FROM PosizionamentoVano PV
-			WHERE PV.Vano = vano_tmp AND PV.Vertice = V.Numero AND PV.Pianta = OLD.Pianta 
+			WHERE PV.Vano = vano_tmp AND PV.Vertice = V.Numero_Vertice AND PV.Pianta = OLD.Pianta 
 		) = 1
 		AND NOT EXISTS
 		(	
 			SELECT *
 			FROM PosizionamentoVano PV
-			WHERE PV.Vano <> vano_tmp AND PV.Vertice = V.Numero AND PV.Pianta = OLD.Pianta 
+			WHERE PV.Vano <> vano_tmp AND PV.Vertice = V.Numero_Vertice AND PV.Pianta = OLD.Pianta 
 		)
 
 		DELETE FROM PosizionamentoVano
-		WHERE Vano = vano_tmp and Numero > OLD.numero
+		WHERE Vano = vano_tmp AND Numero_Vertice > OLD.Numero_Vertice
 
 		IF 
 			finito = 1 
@@ -1722,6 +1736,7 @@ BEGIN
 END $$
 DELIMITER ;
 
+/*
 # Quando viene messo un vertice per determinare il perimetro esterno, si viene a creare un'istanza di Muro che dà sull'esterno
 DROP TRIGGER IF EXISTS MuroEsterno;
 DELIMITER $$
@@ -1760,6 +1775,7 @@ BEGIN
     END IF;
 END $$
 DELIMITER ;
+*/
 
 # Controlla che un vertice non sia interno ad un vano o che non sia esterno al perimetro
 DROP TRIGGER IF EXISTS ControlloVerticeInterno;
@@ -1797,9 +1813,15 @@ FOR EACH ROW
 BEGIN
 	DECLARE punto_ok BOOL DEFAULT TRUE;
     
-    
-    
-    SELECT Controllo_Punto_Interno_Pianta(NEW.x, NEW.y, NEW.Pianta) INTO punto_ok;
+    IF
+		NEW.Numero_Vertice
+        >
+        (SELECT P.PuntiPerimetro
+		 FROM Pianta P
+		 WHERE P.Codice_Pianta = NEW.Pianta)
+    THEN
+		SELECT Controllo_Punto_Interno_Pianta(NEW.x, NEW.y, NEW.Pianta) INTO punto_ok;
+    END IF;
     
     IF 
 		punto_ok = FALSE
@@ -1970,28 +1992,28 @@ BEGIN
 			SET min_x = 
 				(
 				SELECT MIN(V.x)
-				FROM PosizionamentoVano PV INNER JOIN Vertice V on V.NumeroVertice = PV.Vertice
+				FROM PosizionamentoVano PV INNER JOIN Vertice V on V.Numero_Vertice = PV.Vertice
 				WHERE V.Pianta = NEW.Pianta and PV.Vano = NEW.Vano
 				);
 		
 			SET max_x =
 				(
 				SELECT MAX(V.x)
-				FROM PosizionamentoVano PV INNER JOIN Vertice V on V.NumeroVertice = PV.Vertice
+				FROM PosizionamentoVano PV INNER JOIN Vertice V on V.Numero_Vertice = PV.Vertice
 				WHERE V.Pianta = NEW.Pianta and PV.Vano = NEW.Vano
 				);
 		
 			SET min_y =
 				(
 				SELECT MIN(V.y)
-				FROM PosizionamentoVano PV INNER JOIN Vertice V on V.NumeroVertice = PV.Vertice
+				FROM PosizionamentoVano PV INNER JOIN Vertice V on V.Numero_Vertice = PV.Vertice
 				WHERE V.Pianta = NEW.Pianta and PV.Vano = NEW.Vano
 				);
 		
 			SET max_y =
 				(
 				SELECT MAX(V.y)
-				FROM PosizionamentoVano PV INNER JOIN Vertice V on V.NumeroVertice = PV.Vertice
+				FROM PosizionamentoVano PV INNER JOIN Vertice V on V.Numero_Vertice = PV.Vertice
 				WHERE V.Pianta = NEW.Pianta and PV.Vano = NEW.Vano
 				);
 		
@@ -5342,7 +5364,7 @@ BEGIN
 	THEN
 		INSERT INTO _Classifica_Vertici
 			SELECT V.Numero_Vertice, V.X, V.Y
-			FROM PosizionamentoVano PV INNER JOIN Vertice V ON V.Numero = PV.Vertice AND V.Pianta = PV.Pianta
+			FROM PosizionamentoVano PV INNER JOIN Vertice V ON V.Numero_Vertice = PV.Vertice AND V.Pianta = PV.Pianta
 			WHERE PV.Vano = _vano
             ORDER BY V.Numero_Vertice;
 
@@ -5985,67 +6007,67 @@ BEGIN
 	WHEN 'Terremoto' THEN INSERT INTO _Sensori_Anomali 
     (
 		SELECT S.ID, S.Tipologia
-        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.CodicePianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
+        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.Codice_Pianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
         WHERE E.ID = _EdificioColpito AND S.Tipologia = 'Accelerometro X' OR S.Tipologia = 'Accelerometro Y' OR S.Tipologia = 'Accelerometro Z' OR S.Tipologia = 'Giroscopio X' OR S.Tipologia = 'Giroscopio Y' OR S.Tipologia = 'Giroscopio Z'
     ) ;
     WHEN 'Eruzione vulcanica' THEN INSERT INTO _Sensori_Anomali 
 	(
 		SELECT S.ID, S.Tipologia
-        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.CodicePianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
+        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.Codice_Pianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
         WHERE E.ID = _EdificioColpito AND S.Tipologia = 'Termostato Esterno Caldo' OR S.Tipologia = 'Termostato Interno Caldo'
 	) ;
 	WHEN 'Alluvione' THEN INSERT INTO _Sensori_Anomali 
     (
 		SELECT S.ID, S.Tipologia
-        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.CodicePianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
+        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.Codice_Pianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
         WHERE E.ID = _EdificioColpito AND S.Tipologia = 'Pluviometro' OR S.Tipologia = 'Igrometro Esterno'
 	) ;
     WHEN 'Tornado' THEN INSERT INTO _Sensori_Anomali 
     (
 		SELECT S.ID, S.Tipologia
-        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.CodicePianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
+        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.Codice_Pianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
         WHERE E.ID = _EdificioColpito AND S.Tipologia = 'Accelerometro X' OR S.Tipologia = 'Accelerometro Y' OR S.Tipologia = 'Accelerometro Z' OR S.Tipologia = 'Giroscopio X' OR S.Tipologia = 'Giroscopio Y' OR S.Tipologia = 'Giroscopio Z'
     ) ;
     WHEN 'Ondata di Caldo' THEN INSERT INTO _Sensori_Anomali 
     (
 		SELECT S.ID, S.Tipologia
-        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.CodicePianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
+        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.Codice_Pianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
         WHERE E.ID = _EdificioColpito AND S.Tipologia = 'Termostato Esterno Caldo'
     ) ;
     WHEN 'Ondata di Freddo' THEN INSERT INTO _Sensori_Anomali 
     (
 		SELECT S.ID, S.Tipologia
-        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.CodicePianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
+        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.Codice_Pianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
         WHERE E.ID = _EdificioColpito AND S.Tipologia = 'Termostato Esterno Freddo'
     ) ;
     WHEN 'Innalzamento Umidità Esterna' THEN INSERT INTO _Sensori_Anomali 
 	(
 		SELECT S.ID, S.Tipologia
-        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.CodicePianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
+        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.Codice_Pianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
         WHERE E.ID = _EdificioColpito AND S.Tipologia = 'Igrometro Esterno'
 	) ;
     WHEN 'Innalzamento Umidità Interna' THEN INSERT INTO _Sensori_Anomali 
 	(
 		SELECT S.ID, S.Tipologia
-        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.CodicePianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
+        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.Codice_Pianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
         WHERE E.ID = _EdificioColpito AND S.Tipologia = 'Igrometro Interno'
 	) ;
     WHEN 'Incendio' THEN INSERT INTO _Sensori_Anomali 
     (
 		SELECT S.ID, S.Tipologia
-        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.CodicePianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
+        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.Codice_Pianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
         WHERE E.ID = _EdificioColpito AND S.Tipologia = 'Termostato Interno Caldo'
     ) ;
     WHEN 'Gelo' THEN INSERT INTO _Sensori_Anomali 
     (
 		SELECT S.ID, S.Tipologia
-        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.CodicePianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
+        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.Codice_Pianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
         WHERE E.ID = _EdificioColpito AND S.Tipologia = 'Termostato Interno Freddo'
     ) ;
     WHEN 'Valanga' THEN INSERT INTO _Sensori_Anomali 
     (
 		SELECT S.ID, S.Tipologia
-        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.CodicePianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
+        FROM Edifico E INNER JOIN Pianta P ON E.ID = P.Edificio INNER JOIN Vano V ON V.Pianta = P.Codice_Pianta INNER JOIN Sensore S ON S.Locazione = V.CodiceVano
         WHERE E.ID = _EdificioColpito AND S.Tipologia = 'Accelerometro X' OR S.Tipologia = 'Accelerometro Y' OR S.Tipologia = 'Accelerometro Z' OR S.Tipologia = 'Giroscopio X' OR S.Tipologia = 'Giroscopio Y' OR S.Tipologia = 'Giroscopio Z'
     ) ;
 	END CASE ;
@@ -6268,12 +6290,35 @@ VALUES (1, 'Abitazione', 016),
 	   (1, 'Negozio', 005),
 	   (1, 'Abitazione', 016);
        
-/*INSERT INTO Pianta(Edificio, PuntiPerimetro, NumeroPiano)
-VALUES (001, 13, 0),
+INSERT INTO Pianta(Edificio, PuntiPerimetro, NumeroPiano)
+VALUES (001, 6, 0),
 	   (002, 4, 0),
        (002, 4, 1),
        (002, 4, 2),
-       (002, 4, 3);*/
+       (002, 4, 3),
+       (003, 4, 0),
+       (003, 4, 1),
+       (004, 4, 0),
+       (004, 4, 1),
+       (005, 4, -1),
+       (005, 4, 0);
+       
+INSERT INTO Vano(Funzione, PuntiPerimetro, AltezzaMax, Pianta)
+VALUES ('Camera', 4, 2.8, 001),
+	   ('Camera', 4, 2.8, 001),
+       ('Cucina', 4, 2.8, 001),
+	   ('Bagno', 4, 2.8, 001),
+       ('Salotto', 4, 3, 001),
+       ('Garage', 4, 2.8, 001),
+       ('Garage', 7, 2.8, 001);
+
+INSERT INTO Vertice(Numero_Vertice, Pianta, X, Y)
+VALUES (1, 001, 0, 0),
+	   (2, 001, 10, 0),
+       (3, 001, 10, 15),
+       (4, 001, 6, 14),
+       (5, 001, 6, 18),
+       (6, 001, 0, 18);
 
 INSERT INTO ProgettoEdilizio(Tipo, DataApprovazione, DataInizio, StimaFine, DataFine, Edificio)
 VALUES ('Costruzione', '2017-01-01', '2017-04-04', '2018-04-04', '2018-05-01', 001), 
