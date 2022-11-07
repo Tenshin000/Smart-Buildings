@@ -659,9 +659,9 @@ DELIMITER $$
 CREATE FUNCTION Controllo_Punto_Interno_Pianta(x FLOAT, y FLOAT, codice_pianta INT)
 RETURNS BOOL DETERMINISTIC
 BEGIN
-		DECLARE interno_perimetro BOOL DEFAULT TRUE;
-		DECLARE finito INT DEFAULT 0;
-		DECLARE contatore INT DEFAULT 1;
+	DECLARE interno_perimetro BOOL DEFAULT TRUE;
+	DECLARE finito INT DEFAULT 0;	
+	DECLARE contatore INT DEFAULT 1;
         DECLARE numero_punti INT DEFAULT 0;
         DECLARE x0 INT DEFAULT 0;
         DECLARE x1 INT DEFAULT 0;
@@ -958,15 +958,146 @@ BEGIN
 END $$
 DELIMITER ;
 
+DROP TRIGGER IF EXISTS Collocazione_Pianta
+DELIMITER $$
+CREATE TRIGGER Collocazione_Pianta
+BEFORE INSERT ON Vertice
+BEGIN
+DECLARE Quanti_vertici INT DEFAULT 0;
+DECLARE fintito INT DEFAULT 0;
+DECLARE Punti_pianta INT DEFAULT 0;
+DECLARE ultimo_x, ultimoy FLOAT DEFAULT 0;
+
+DECLARE Punti_pianta INT DEFAULT 0;DECLARE muri CURSOR FOR
+		SELECT M.V1, M.V2, V1.X, V1.Y, V2.X, V2.Y
+		FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice 
+		WHERE M.Pianta = NEW.Pianta AND V1.Pianta = NEW.Pianta AND V2.Pianta = NEW.Pianta;
+		
+DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
+
+SET Quanti_vertici =
+(
+	SELECT COUNT(*)
+	FROM Vertice
+	WHERE Pianta = NEW.Pianta
+);
+
+SET Punti_pianta =
+(
+	SELECT PuntiPerimetro FROM Pianta WHERE CodicePianta = NEW.Pianta
+);
+
+SET ultimo_x =
+(
+	SELECT x
+	FROM Vertice
+	WHERE Pianta = NEW.Pianta AND Numero = NEW.Numero - 1 ;
+);
+
+SET ultimo_y =
+(
+	SELECT y
+	FROM Vertice
+	WHERE Pianta = NEW.Pianta AND Numero = NEW.Numero - 1 ;
+);
+
+IF Quanti_vertici < Punti_pianta - 1 AND NEW.Numero <> 1
+THEN
+(
+	OPEN muri;
+	ciclo: LOOP
+	FETCH INTO v3, v4, x3, y3, x4 ,y4;
+	IF Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
+	THEN SIGNAL SQL STATE '45000' SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!' 
+	IF finito = 1
+	THEN END LOOP;
+)
+END IF;
+
+IF Quanti_vertici = Punti_pianta - 1 AND NEW.Numero <> 1
+THEN
+(
+	OPEN muri;
+	ciclo: LOOP
+	FETCH INTO v3, v4, x3, y3, x4 ,y4;
+	IF Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
+	THEN SIGNAL SQL STATE '45000' SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!' 
+	IF finito = 1
+	THEN 
+	(
+		SET ultimo_x =
+		(
+			SELECT X
+			FROM Vertice
+			WHERE Pianta = NEW.Pianta AND Numero = ( SELECT MIN(_V.Numero) FROM Vertice _V WHERE _V.Pianta = NEW.Pianta
+		);
+		
+		SET ultimo_y =
+		(
+			SELECT Y
+			FROM Vertice
+			WHERE Pianta = NEW.Pianta AND Numero = ( SELECT MIN(_V.Numero) FROM Vertice _V WHERE _V.Pianta = NEW.Pianta
+		);
+		
+		IF Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
+		THEN SIGNAL SQL STATE '45000' SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!
+		
+		END LOOP;
+	)
+)
+END IF;
+
+END $$
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS Creazione_muri_pianta
+DELIMITER $$
+CREATE TRIGGER Creazione_muri_pianta
+AFTER INSERT ON Vertice
+BEGIN
+
+DECLARE Ultimo INT DEFAULT 0;
+DECLARE Quanti_vertici INT DEFAULT 0;
+DECLARE Punti_pianta INT DEFAULT 0;
+
+# INSERIRE UN IF CHE CONTROLLA CHE IL VERTICE INSERITO NON SIA IL PRIMO
+
+SET Quanti_vertici =
+(
+	SELECT COUNT(*)
+	FROM Vertice
+	WHERE Pianta = NEW.Pianta
+);
+
+SET Punti_pianta =
+(
+	SELECT PuntiPerimetro FROM Pianta WHERE CodicePianta = NEW.Pianta
+);
+
+IF Quanti_vertici = Punti_pianta - 1 AND NEW.Numero <> 1
+SET Ultimo =
+(
+	SELECT Numero
+	FROM Vertice
+	WHERE Numero = NEW.Numero - 1 ;
+)
+
+INSERT ON Muro(FALSE, Ultimo, NEW.Numero, NEW.Pianta)
+
+END $$
+DELIMITER ;
+
+
 # Questa funzione prende come input le coordinate (x;y) di un vertice e il codice della pianta e vede se è all'interno di un muro
 DROP FUNCTION IF EXISTS Controllo_Punto_Su_Muro;
 DELIMITER $$
 CREATE FUNCTION Controllo_Punto_Su_Muro(x FLOAT, y FLOAT, codice_pianta INT)
 RETURNS BOOL DETERMINISTIC
 BEGIN
-		DECLARE interno_pianta BOOL DEFAULT TRUE;
-		DECLARE finito INT DEFAULT 0;
-		DECLARE contatore INT DEFAULT 1;
+
+	DECLARE interno_pianta BOOL DEFAULT TRUE;
+	DECLARE finito INT DEFAULT 0;
+	DECLARE contatore INT DEFAULT 1;
         DECLARE numero_punti INT DEFAULT 0;
         DECLARE x0 INT DEFAULT 0;
         DECLARE x1 INT DEFAULT 0;
