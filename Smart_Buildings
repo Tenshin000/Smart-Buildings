@@ -2,6 +2,7 @@ DROP DATABASE IF EXISTS Smart_Buildings;
 CREATE DATABASE Smart_Buildings;
 SET @timer = CURRENT_TIME();
 SET FOREIGN_KEY_CHECKS = 0;
+SET SQL_SAFE_UPDATES = 0;
 USE Smart_Buildings;
 
 # CREAZIONE TABELLE
@@ -541,6 +542,24 @@ BEGIN
         DECLARE intersezione INT DEFAULT 0;
         DECLARE numero_intersezioni INT DEFAULT 0;
         
+        SET contatore = (SELECT MIN(Ve.Numero_Vertice)
+							 FROM Vertice Ve INNER JOIN PosizionamentoVano PV ON Ve.Numero_Vertice = PV.Vertice
+											 INNER JOIN Vano Va ON PV.Vano = Va.Codice_Vano
+							 WHERE Ve.Pianta = codice_pianta
+								  AND 
+								   Va.Pianta = codice_pianta
+								  AND
+								   Va.Codice_Vano = codice_vano);
+                                   
+		SET numero_punti = (SELECT MAX(Ve.Numero_Vertice)
+								FROM Vertice Ve INNER JOIN PosizionamentoVano PV ON Ve.Numero_Vertice = PV.Vertice
+								                INNER JOIN Vano Va ON PV.Vano = Va.Codice_Vano
+								WHERE Ve.Pianta = codice_pianta
+									 AND 
+									  Va.Pianta = codice_pianta
+									 AND
+									  Va.Codice_Vano = codice_vano);
+        
 	    ciclo: LOOP
 			IF
 				contatore < numero_punti
@@ -697,7 +716,7 @@ BEGIN
             SET numero_intersezioni = 0;
             
             SET contatore = (SELECT MIN(Ve.Numero_Vertice)
-							 FROM Vertice Ve INNER JOIN Posizionamento_Vano PV ON Ve.Numero_Vertice = PV.Vertice
+							 FROM Vertice Ve INNER JOIN PosizionamentoVano PV ON Ve.Numero_Vertice = PV.Vertice
 											 INNER JOIN Vano Va ON PV.Vano = Va.Codice_Vano
 							 WHERE Ve.Pianta = codice_pianta
 								  AND 
@@ -706,7 +725,7 @@ BEGIN
 								   Va.Codice_Vano = codice_vano);
                                    
             SET numero_punti = (SELECT MAX(Ve.Numero_Vertice)
-								FROM Vertice Ve INNER JOIN Posizionamento_Vano PV ON Ve.Numero_Vertice = PV.Vertice
+								FROM Vertice Ve INNER JOIN PosizionamentoVano PV ON Ve.Numero_Vertice = PV.Vertice
 								                INNER JOIN Vano Va ON PV.Vano = Va.Codice_Vano
 								WHERE Ve.Pianta = codice_pianta
 									 AND 
@@ -722,7 +741,7 @@ BEGIN
 					THEN 
 					BEGIN
 						SET x0 = (SELECT V.X
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -730,7 +749,7 @@ BEGIN
 										V.Numero_Vertice = contatore);
 					
 						SET y0 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -738,7 +757,7 @@ BEGIN
 										V.Numero_Vertice = contatore);
 						
 						SET x1 = (SELECT V.X
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -746,7 +765,7 @@ BEGIN
 										V.Numero_Vertice = (contatore+1));
 
 						SET y1 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -776,7 +795,7 @@ BEGIN
 					THEN 
 					BEGIN
 						SET x0 = (SELECT V.X
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -784,7 +803,7 @@ BEGIN
 										V.Numero_Vertice = contatore);
 					
 						SET y0 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -792,7 +811,7 @@ BEGIN
 										V.Numero_Vertice = contatore);
 						
 						SET x1 = (SELECT V.X
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -800,7 +819,7 @@ BEGIN
 										V.Numero_Vertice = minimo);
 
 						SET y1 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -986,17 +1005,17 @@ BEGIN
 		OPEN muri;
 		ciclo: LOOP
 		FETCH muri INTO v3, v4, x3, y3, x4 ,y4;
+        IF 
+			finito = 1
+		THEN 
+			LEAVE ciclo;
+		END IF;
+        
 		IF 
 			Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
 		THEN 
 			SIGNAL SQLSTATE '45000' 
 			SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
-		END IF;
-        
-		IF 
-			finito = 1
-		THEN 
-			LEAVE ciclo;
 		END IF;
 		END LOOP;
 	END IF;
@@ -1007,14 +1026,7 @@ BEGIN
 		OPEN muri;
 		ciclo: LOOP
 		FETCH muri INTO v3, v4, x3, y3, x4 ,y4;
-		IF 
-			Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
-		THEN 
-			SIGNAL SQLSTATE '45000' 
-            SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
-		END IF;
-        
-		IF 
+        IF 
 			finito = 1
 		THEN 
 			SET ultimo_x =
@@ -1039,6 +1051,13 @@ BEGIN
 			END IF;
             
 			LEAVE ciclo;
+		END IF;
+        
+		IF 
+			Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
+		THEN 
+			SIGNAL SQLSTATE '45000' 
+            SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
 		END IF;
 		END LOOP;
 	END IF;
@@ -1140,12 +1159,14 @@ BEGIN
 		controllo_vano: LOOP
 			FETCH cursore_codici_vano INTO codice_vano;
             
-            IF finito = 1 THEN
+            IF 
+				finito = 1 
+            THEN
 				LEAVE controllo_vano;
 			END IF;
             
             SET contatore = (SELECT MIN(Ve.Numero_Vertice)
-							 FROM Vertice Ve INNER JOIN Posizionamento_Vano PV ON Ve.Numero_Vertice = PV.Vertice
+							 FROM Vertice Ve INNER JOIN PosizionamentoVano PV ON Ve.Numero_Vertice = PV.Vertice
 											 INNER JOIN Vano Va ON PV.Vano = Va.Codice_Vano
 							 WHERE Ve.Pianta = codice_pianta
 								  AND 
@@ -1154,7 +1175,7 @@ BEGIN
 								   Va.Codice_Vano = codice_vano);
                                    
             SET numero_punti = (SELECT MAX(Ve.Numero_Vertice)
-								FROM Vertice Ve INNER JOIN Posizionamento_Vano PV ON Ve.Numero_Vertice = PV.Vertice
+								FROM Vertice Ve INNER JOIN PosizionamentoVano PV ON Ve.Numero_Vertice = PV.Vertice
 								                INNER JOIN Vano Va ON PV.Vano = Va.Codice_Vano
 								WHERE Ve.Pianta = codice_pianta
 									 AND 
@@ -1170,7 +1191,7 @@ BEGIN
 					THEN 
 					BEGIN
 						SET x0 = (SELECT V.X
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -1178,7 +1199,7 @@ BEGIN
 										V.Numero_Vertice = contatore);
 					
 						SET y0 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -1186,7 +1207,7 @@ BEGIN
 										V.Numero_Vertice = contatore);
 						
 						SET x1 = (SELECT V.X
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -1194,7 +1215,7 @@ BEGIN
 										V.Numero_Vertice = (contatore+1));
 
 						SET y1 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -1223,7 +1244,7 @@ BEGIN
 					THEN 
 					BEGIN
 						SET x0 = (SELECT V.X
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -1231,7 +1252,7 @@ BEGIN
 										V.Numero_Vertice = contatore);
 					
 						SET y0 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -1239,7 +1260,7 @@ BEGIN
 										V.Numero_Vertice = contatore);
 						
 						SET x1 = (SELECT V.X
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -1247,7 +1268,7 @@ BEGIN
 										V.Numero_Vertice = minimo);
 
 						SET y1 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN Posizionamento_Vano ON V.Numero_Vertice = PV.Vertice
+								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
 								  WHERE V.Pianta = codice_pianta
 									   AND
                                         PV.Vano = codice_vano
@@ -1317,6 +1338,11 @@ BEGIN
     OPEN lista_capocantieri;
     ciclo: LOOP
 		FETCH lista_capocantieri INTO capocantiere, numero_lavoratori;
+		IF 
+			finito = 1
+		THEN 
+			LEAVE ciclo;
+		END IF;
 		
         SET lavori_ritardo = (SELECT IFNULL(COUNT(DISTINCT L.Codice), 0)
 							  FROM Lavoro L INNER JOIN Turni_Di_Lavoro_Capocantiere T ON L.Codice = T.Lavoro
@@ -1399,12 +1425,6 @@ BEGIN
             SET NumeroMassimoLavoratori = NumeroMassimoLavoratori + 1
             WHERE CodiceFiscale = capocantiere; 
         END IF;
-        
-        IF 
-			finito = 1
-		THEN 
-			LEAVE ciclo;
-		END IF;
     END LOOP;
     CLOSE lista_capocantieri;
 END $$
@@ -1431,6 +1451,11 @@ BEGIN
     OPEN lista_lavori_oggi;
     ciclo: LOOP
 		FETCH lista_lavori_oggi INTO lavoro, giorni_lavoro;
+		IF 
+			finito = 1
+		THEN 
+			LEAVE ciclo;
+		END IF;
 		
         SET costo_manodopera = 
 								(
@@ -1479,12 +1504,6 @@ BEGIN
         UPDATE Lavoro
         SET Costo = costo_manodopera + costo_materiali
         WHERE Codice_Lavoro = lavoro AND DataFine IS NOT NULL;
-        
-        IF 
-			finito = 1
-		THEN 
-			LEAVE ciclo;
-		END IF;
     END LOOP;
     CLOSE lista_lavori_oggi;
 END $$
@@ -1699,7 +1718,12 @@ BEGIN
 	THEN
 		OPEN vani
 		ciclo: LOOP
-		FETCH vani INTO vano_tmp
+		FETCH vani INTO vano_tmp;
+		IF 
+			finito = 1 
+        THEN 
+			LEAVE ciclo
+		END IF;
 
 		DELETE FROM Muro M
 		WHERE Pianta = OLD.Pianta AND ( M.V1 >= OLD.Numero_Vertice OR M.V2 >= OLD.Numero_Vertice ) 
@@ -1726,12 +1750,6 @@ BEGIN
 
 		DELETE FROM PosizionamentoVano
 		WHERE Vano = vano_tmp AND Numero_Vertice > OLD.Numero_Vertice
-
-		IF 
-			finito = 1 
-        THEN 
-			LEAVE ciclo
-		END IF;
 	END IF;
 END $$
 DELIMITER ;
@@ -1792,7 +1810,6 @@ BEGIN
 	
     IF
 		NEW.Numero_Vertice > vertici_perimetro
-        
     THEN
 		IF
 			Controllo_Punto_Interno_Pianta(NEW.X, NEW.Y, NEW.Pianta) = FALSE
@@ -1899,15 +1916,7 @@ BEGIN
 	OPEN muri;
 	ciclo: LOOP
 		FETCH muri INTO v1, v2, v1_x, v1_y, v2_x, v2_y;
-		SET inter = intersezione(x1, y1, x2, y2, v1_x, v1_y, v2_x, v2_y);
-		IF 
-			inter = TRUE
-		THEN
-			SIGNAL SQLSTATE '45000'
-			SET MESSAGE_TEXT = 'Impossibile Inserire! Planimetria Irrealizzabile!';
-		END IF;
-        
-		IF
+			IF
 			finito = 1
 		THEN 
 			SET x2 =
@@ -1934,6 +1943,14 @@ BEGIN
 
 			LEAVE ciclo;
             END IF;
+		END IF;
+        
+		SET inter = intersezione(x1, y1, x2, y2, v1_x, v1_y, v2_x, v2_y);
+		IF 
+			inter = TRUE
+		THEN
+			SIGNAL SQLSTATE '45000'
+			SET MESSAGE_TEXT = 'Impossibile Inserire! Planimetria Irrealizzabile!';
 		END IF;
 	END LOOP;
 	CLOSE muri;
@@ -5701,6 +5718,12 @@ BEGIN
     OPEN cursore_sensori;
     ciclo: LOOP
 		FETCH cursore_sensori INTO sensore, tipo;
+		IF 
+			finito = 1
+		THEN 
+			LEAVE ciclo;
+		END IF;
+        
         CASE
 			WHEN
 				stato_tmp < 2
@@ -5900,12 +5923,6 @@ BEGIN
                 INSERT INTO _Sensori_Sopra_Alert(ID_Sensore, Tipo_Sensore, Soluzione, Numero_Lavoratori_Consigliati, Materiali_Consigliati, Priorita, Priorita_Int)
                 VALUES (sensore, tipo, 'Riparazione Muratura', 7, 'Cemento, Mattone laterzio, Mattone in Terra Piena, Intonaco a Base di Gesso, Intonaco a Base di Calce e Intonaco a Base di Malta', 'Alta', 5);
 		END CASE;
-        
-        IF 
-			finito = 1
-		THEN 
-			LEAVE ciclo;
-		END IF;
     END LOOP;
     CLOSE cursore_sensori;
     END IF;
@@ -6310,7 +6327,117 @@ VALUES ('Camera', 4, 2.8, 001),
 	   ('Bagno', 4, 2.8, 001),
        ('Salotto', 4, 3, 001),
        ('Garage', 4, 2.8, 001),
-       ('Garage', 7, 2.8, 001);
+       ('Garage', 7, 2.8, 001),
+       ('Entrata', 6, 3, 002),
+       ('Ascensore', 4, 3, 002),
+       ('Cucina', 4, 3, 002),
+       ('Bagno', 4, 3, 002),
+       ('Camera', 4, 3, 002),
+       ('Corridoio', 12, 3, 003),
+       ('Ascensore', 4, 3, 003),
+       ('Bagno', 4, 3, 003),
+       ('Cucina', 4, 3, 003),
+       ('Camera', 4, 3, 003),
+       ('Bagno', 4, 3, 003),
+       ('Cucina', 4, 3, 003),
+       ('Camera', 4, 3, 003),
+       ('Bagno', 4, 3, 003),
+       ('Cucina', 4, 3, 003),
+       ('Camera', 4, 3, 003),
+       ('Bagno', 4, 3, 003),
+       ('Cucina', 4, 3, 003),
+       ('Camera', 4, 3, 003),
+       ('Bagno', 4, 3, 003),
+       ('Cucina', 4, 3, 003),
+       ('Camera', 4, 3, 003),
+       ('Bagno', 4, 3, 003),
+       ('Cucina', 4, 3, 003),
+       ('Camera', 4, 3, 003),
+       ('Bagno', 4, 3, 003),
+       ('Cucina', 4, 3, 003),
+       ('Camera', 4, 3, 003),
+       ('Bagno', 4, 3, 003),
+       ('Cucina', 4, 3, 003),
+       ('Camera', 4, 3, 003),
+       ('Corridoio', 12, 3, 004),
+       ('Ascensore', 4, 3, 004),
+       ('Bagno', 4, 3, 004),
+       ('Cucina', 4, 3, 004),
+       ('Camera', 4, 3, 004),
+       ('Bagno', 4, 3, 004),
+       ('Cucina', 4, 3, 004),
+       ('Camera', 4, 3, 004),
+       ('Bagno', 4, 3, 004),
+       ('Cucina', 4, 3, 004),
+       ('Camera', 4, 3, 004),
+       ('Bagno', 4, 3, 004),
+       ('Cucina', 4, 3, 004),
+       ('Camera', 4, 3, 004),
+       ('Bagno', 4, 3, 004),
+       ('Cucina', 4, 3, 004),
+       ('Camera', 4, 3, 004),
+       ('Bagno', 4, 3, 004),
+       ('Cucina', 4, 3, 004),
+       ('Camera', 4, 3, 004),
+       ('Bagno', 4, 3, 004),
+       ('Cucina', 4, 3, 004),
+       ('Camera', 4, 3, 004),
+       ('Bagno', 4, 3, 004),
+       ('Cucina', 4, 3, 004),
+       ('Camera', 4, 3, 004),
+       ('Corridoio', 12, 3, 005),
+       ('Ascensore', 4, 3, 005),
+       ('Bagno', 4, 3, 005),
+       ('Cucina', 4, 3, 005),
+       ('Camera', 4, 3, 005),
+       ('Bagno', 4, 3, 005),
+       ('Cucina', 4, 3, 005),
+       ('Camera', 4, 3, 005),
+       ('Bagno', 4, 3, 005),
+       ('Cucina', 4, 3, 005),
+       ('Camera', 4, 3, 005),
+       ('Bagno', 4, 3, 005),
+       ('Cucina', 4, 3, 005),
+       ('Camera', 4, 3, 005),
+       ('Bagno', 4, 3, 005),
+       ('Cucina', 4, 3, 005),
+       ('Camera', 4, 3, 005),
+       ('Bagno', 4, 3, 005),
+       ('Cucina', 4, 3, 005),
+       ('Camera', 4, 3, 005),
+       ('Bagno', 4, 3, 005),
+       ('Cucina', 4, 3, 005),
+       ('Camera', 4, 3, 005),
+       ('Bagno', 4, 3, 005),
+       ('Cucina', 4, 3, 005),
+       ('Camera', 4, 3, 005),
+       ('Corridoio', 12, 2.8, 006),
+       ('Cucina', 4, 2.8, 006),
+       ('Sala da Pranzo', 4, 2.8, 006),
+       ('Salotto', 4, 2.8, 006),
+       ('Salotto', 4, 2.8, 006),
+       ('Corridoio', 4, 2.8, 007),
+       ('Camera', 4, 2.8, 007),
+       ('Bagno', 4, 2.8, 007),
+       ('Camera', 4, 2.8, 007),
+       ('Camera', 4, 2.8, 007),
+       ('Sgabuzzino', 4, 2.8, 007),
+       ('Corridoio', 12, 2.8, 008),
+       ('Cucina', 4, 2.8, 008),
+       ('Camera', 4, 2.8, 008),
+       ('Salotto', 4, 2.8, 008),
+       ('Salotto', 4, 2.8, 008),
+       ('Corridoio', 4, 2.8, 009),
+       ('Camera', 4, 2.8, 009),
+       ('Bagno', 4, 2.8, 009),
+       ('Camera', 4, 2.8, 009),
+       ('Camera', 4, 2.8, 009),
+       ('Sgabuzzino', 4, 2.8, 009),
+       ('Sgabuzzino', 4, 2.3, 010),
+       ('Bagno', 4, 2.7, 011),
+       ('Camera', 4, 2.7, 011),
+       ('Cucina', 4, 2.7, 011),
+       ('Salotto', 4, 2.7, 011);
 
 INSERT INTO Vertice(Numero_Vertice, Pianta, X, Y)
 VALUES (1, 001, 0, 0),
@@ -6318,7 +6445,17 @@ VALUES (1, 001, 0, 0),
        (3, 001, 10, 15),
        (4, 001, 6, 14),
        (5, 001, 6, 18),
-       (6, 001, 0, 18);
+       (6, 001, 0, 18);/*
+       (7, 001, 0, 0),
+       (8, 001, 4, 0),
+       (9, 001, 4, 6),
+       (10, 001, 0, 6);
+       
+INSERT INTO PosizionamentoVano(Vano, Vertice, Pianta)
+VALUES (001, 7, 001),
+	   (001, 8, 001),
+       (001, 9, 001),
+       (001, 10, 001);*/
 
 INSERT INTO ProgettoEdilizio(Tipo, DataApprovazione, DataInizio, StimaFine, DataFine, Edificio)
 VALUES ('Costruzione', '2017-01-01', '2017-04-04', '2018-04-04', '2018-05-01', 001), 
@@ -6738,6 +6875,11 @@ BEGIN
     OPEN lista_lavori;
     ciclo: LOOP
 		FETCH lista_lavori INTO lavoro, nome_lavoro, data_compravendita;
+		IF 
+			finito = 1
+		THEN 
+			LEAVE ciclo;
+		END IF;
 		
 		SET data_compravendita = DATE_SUB(data_compravendita, INTERVAL 1 WEEK);
         
@@ -7732,12 +7874,6 @@ BEGIN
 					
 			SET numero_stringa_a = numero_stringa_a + 1;
         END IF;
-        
-        IF 
-			finito = 1
-		THEN 
-			LEAVE ciclo;
-		END IF;
     END LOOP;
     CLOSE lista_lavori;
     
@@ -7804,6 +7940,12 @@ BEGIN
 	OPEN lista_lavori;
     ciclo: LOOP
 		FETCH lista_lavori INTO lavoro, nome_lavoro;
+		IF 
+			finito = 1
+		THEN 
+			LEAVE ciclo;
+		END IF;
+        
 		IF
 			nome_lavoro = 'Ispezione Fondamenta'
 			OR
@@ -7873,12 +8015,6 @@ BEGIN
                 SET giorni = giorni + 1;
             END LOOP;
         END IF;
-        
-        IF 
-			finito = 1
-		THEN 
-			LEAVE ciclo;
-		END IF;
     END LOOP;
     CLOSE lista_lavori;
 END $$
@@ -7904,6 +8040,11 @@ BEGIN
 	OPEN lista_lavori;
     ciclo: LOOP
 		FETCH lista_lavori INTO lavoro, nome_lavoro, data_inizio, numero_stadio;
+			IF 
+                finito = 1
+            THEN 
+                LEAVE ciclo;
+            END IF;
             IF
                 nome_lavoro <> 'Ispezione Fondamenta'
                 AND
@@ -8049,12 +8190,6 @@ BEGIN
                         END LOOP;
                     END IF;
                 END IF;
-
-            IF 
-                finito = 1
-            THEN 
-                LEAVE ciclo;
-            END IF;
     END LOOP;
     CLOSE lista_lavori;
 END $$
@@ -8083,6 +8218,12 @@ BEGIN
     OPEN lista_lavori;
         ciclo: LOOP
             FETCH lista_lavori INTO lavoro, nome_lavoro, data_inizio;
+				IF 
+                    finito = 1
+                THEN 
+                    LEAVE ciclo;
+                END IF;
+                
                 IF
                     nome_lavoro <> 'Ispezione Fondamenta'
                     AND
@@ -8411,12 +8552,6 @@ BEGIN
                 THEN
                     SET numero_randomizzazione = numero_randomizzazione+1;
                 END IF;    
-                
-                IF 
-                    finito = 1
-                THEN 
-                    LEAVE ciclo;
-                END IF;
         END LOOP;
         CLOSE lista_lavori;
 END $$
@@ -8444,6 +8579,12 @@ BEGIN
     OPEN lista_lavori;
         ciclo: LOOP
             FETCH lista_lavori INTO lavoro, nome_lavoro, data_inizio;
+				IF 
+                    finito = 1
+                THEN 
+                    LEAVE ciclo;
+                END IF;
+                
                 IF
                     nome_lavoro <> 'Ispezione Fondamenta'
                     AND
@@ -8772,12 +8913,6 @@ BEGIN
                 THEN
                     SET numero_randomizzazione = numero_randomizzazione+1;
                 END IF;    
-                
-                IF 
-                    finito = 1
-                THEN 
-                    LEAVE ciclo;
-                END IF;
         END LOOP;
         CLOSE lista_lavori;
 END $$
@@ -8806,6 +8941,12 @@ BEGIN
     OPEN lista_lavori;
         ciclo: LOOP
             FETCH lista_lavori INTO lavoro, nome_lavoro, data_inizio;
+				IF 
+                    finito = 1
+                THEN 
+                    LEAVE ciclo;
+                END IF;
+                
                 IF
                     nome_lavoro <> 'Ispezione Fondamenta'
                     AND
@@ -9136,14 +9277,60 @@ BEGIN
                 THEN
                     SET numero_randomizzazione = numero_randomizzazione+1;
                 END IF;    
-                
-                IF 
-                    finito = 1
-                THEN 
-                    LEAVE ciclo;
-                END IF;
         END LOOP;
         CLOSE lista_lavori;
+END $$
+DELIMITER ;
+
+
+DROP PROCEDURE IF EXISTS Popolamento_Soffitto_Pavimentazione;
+DELIMITER $$
+CREATE PROCEDURE Popolamento_Soffitto_Pavimentazione()
+BEGIN
+	DECLARE finito INT DEFAULT 0;
+    DECLARE lotto, nome_lavoro VARCHAR(50) DEFAULT '';
+    DECLARE edificio INT DEFAULT 0;
+    
+	DECLARE cursore_piastrelle CURSOR FOR
+		SELECT IP.Lotto_Piastrelle AS Lotto, L.TipologiaDiLavoro, PE.Edificio
+		FROM ImpiegoPiastrelle IP INNER JOIN Lavoro L ON IP.Lavoro = L.Codice_Lavoro
+								  INNER JOIN ProgettoEdilizio PE ON L.Progetto = PE.ID_Progetto
+		WHERE L.TipologiaDiLavoro = 'Pavimentazione'
+		UNION
+		SELECT IP.Lotto_Pietre AS Lotto, L.TipologiaDiLavoro, PE.Edificio
+		FROM ImpiegoPietre IP INNER JOIN Lavoro L ON IP.Lavoro = L.Codice_Lavoro
+							  INNER JOIN ProgettoEdilizio PE ON L.Progetto = PE.ID_Progetto
+		WHERE L.TipologiaDiLavoro = 'Costruzione e Definizione Stanze';
+	 DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
+	
+    OPEN cursore_piastrelle;
+    ciclo: LOOP
+		FETCH cursore_piastrelle INTO lotto, nome_lavoro, edificio;
+        IF
+			finito = 1
+        THEN
+			LEAVE ciclo;
+        END IF;     
+        
+        IF
+			nome_lavoro = 'Pavimentazione'
+        THEN  
+			UPDATE Vano
+			SET Pavimentazione = lotto
+			WHERE Pianta IN (SELECT P.Codice_Pianta
+							 FROM Pianta P
+							 WHERE P.Edificio = edificio);
+        ELSEIF
+			nome_lavoro = 'Costruzione e Definizione Stanze'
+        THEN		   
+            INSERT INTO Soffitto(Vano, Lotto_Pietre)
+				SELECT V.Codice_Vano, lotto
+				FROM Vano V INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
+                WHERE P.Edificio = edificio;
+        END IF;
+    END LOOP;
+    CLOSE cursore_piastrelle;
+    
 END $$
 DELIMITER ;
 
@@ -9155,3 +9342,4 @@ CALL Popolamento_Turni_CL2();
 CALL Popolamento_Turni_CL3();
 CALL Popolamento_Turni_CL4();
 CALL Procedura_Aggiornamento_Costo_Lavori();
+CALL Popolamento_Soffitto_Pavimentazione();
