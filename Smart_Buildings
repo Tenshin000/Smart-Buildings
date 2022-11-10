@@ -93,10 +93,10 @@ CREATE TABLE Muro(
 DROP TABLE IF EXISTS Apertura;
 CREATE TABLE Apertura(
 	Codice_Apertura INT AUTO_INCREMENT PRIMARY KEY,
-    X1 INT NOT NULL,
-    X2 INT NOT NULL,
-    Y1 INT NOT NULL,
-    Y2 INT NOT NULL,
+    X1 FLOAT NOT NULL,
+    X2 FLOAT NOT NULL,
+    Y1 FLOAT NOT NULL,
+    Y2 FLOAT NOT NULL,
     Balcone BOOL NOT NULL,
     Tipologia VARCHAR(50) NOT NULL,
     PuntoCardinale VARCHAR(10) DEFAULT NULL,
@@ -526,149 +526,245 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 # FUNZIONI DI UTILITÀ
 
+# Restituisce TRUE se x è compreso tra y1 e y2 senza però uguagliare y1 o y2, altrimenti restituisce FALSE
+DROP FUNCTION IF EXISTS compreso_senza_estremi;
+DELIMITER $$
+CREATE FUNCTION compreso_senza_estremi(x FLOAT, y1 FLOAT, y2 FLOAT)
+RETURNS BOOL DETERMINISTIC
+BEGIN
+	DECLARE inter BOOL DEFAULT FALSE;
+    DECLARE max FLOAT DEFAULT 0;
+    DECLARE min FLOAT DEFAULT 0;
+    
+    IF 
+		y1 > y2
+	THEN 
+		SET max = y1;
+        SET min = y2;
+	ELSEIF
+		y1 <= y2
+	THEN 
+		SET max = y2;
+        SET min = y1;
+	END IF;
+        
+	IF
+		(x BETWEEN min AND max AND x <> y1 AND x <> y2) OR (x = min AND x = max)
+    THEN
+		SET inter = TRUE ;
+	END IF;
+    
+	RETURN inter;
+END $$
+DELIMITER ;
+
+DROP FUNCTION IF EXISTS Minimo;
+DELIMITER $$
+CREATE FUNCTION Minimo(x FLOAT, y FLOAT)
+RETURNS FLOAT DETERMINISTIC
+BEGIN
+
+	DECLARE min FLOAT DEFAULT x;
+    
+	IF 
+		x > y
+	THEN 
+		SET min = y;
+	END IF;
+    
+    RETURN min;
+    
+END $$
+DELIMITER ;
+
+DROP FUNCTION IF EXISTS Massimo
+DELIMITER $$
+CREATE FUNCTION Massimo(x FLOAT, y FLOAT)
+RETURNS FLOAT DETERMINISTIC
+BEGIN
+
+	DECLARE max FLOAT DEFAULT x;
+    
+	IF 
+		y > x 
+	THEN 
+		SET max = y;
+	END IF;
+
+	RETURN max;
+END $$
+DELIMITER ;
+
+# Funzione che dato due segmenti in input, restituisce TRUE se si intersecano e FALSE altrimenti
+DROP FUNCTION IF EXISTS Intersezione;
+DELIMITER $$
+CREATE FUNCTION Intersezione(x1 FLOAT, y1 FLOAT, x2 FLOAT, y2 FLOAT, x3 FLOAT, y3 FLOAT, x4 FLOAT, y4 FLOAT)
+RETURNS BOOL DETERMINISTIC 
+BEGIN
+	DECLARE intersezione BOOL DEFAULT FALSE;
+	DECLARE m, q, _m, _q FLOAT DEFAULT 0;
+	DECLARE x_inter, y_inter FLOAT DEFAULT 0;
+    
+	IF 
+		x1 <> x2 AND x3 <> x4
+	THEN 
+		SET m = (y2 - y1) / (x2 - x1) ;
+		SET _m = (y4 - y3) / (x4 - x3) ;
+		SET q = y1 - m * x1 ;
+		SET _q = y3 - _m * x3 ;
+		IF 
+			m <> _m
+		THEN
+			SET x_inter = (q - _q) / (_m - m) ;
+			SET y_inter = x_inter * m + q;
+			# Controllo che il punto appartenga ai due segmenti
+			IF 
+				compreso_senza_estremi(x_inter, x1, x2) = TRUE AND Compreso_senza_estremi(x_inter, x3, x4) = TRUE
+            THEN 
+				IF 
+					compreso_senza_estremi(y_inter, y1, y2) = TRUE AND Compreso_senza_estremi(y_inter, y3, y4) = TRUE
+				THEN
+					SET intersezione = TRUE;
+				END IF;
+			END IF; 
+		END IF;
+	ELSEIF 
+		x1 <> x2 AND x3 = x4
+	THEN
+		SET m = (y2 - y1) / (x2 - x1) ;
+		SET q = y1 - m * x1 ;
+		SET x_inter = x3;
+		SET y_inter = m * x_inter + q;
+		IF 
+			compreso_senza_estremi(x_inter, x1, x2) = TRUE
+        THEN 
+			IF 
+				compreso_senza_estremi(y_inter, y1, y2) = TRUE AND Compreso_senza_estremi(y_inter, y3, y4) = TRUE
+			THEN
+					SET intersezione = TRUE;
+			END IF;
+		END IF;
+	ELSEIF 
+		x3 <> x4 AND x1 = x2
+	THEN
+		SET m = (y4 - y3) / (x4 - x3);
+		SET q = y3 - m * x3 ;
+		SET x_inter = x1;
+		SET y_inter = m * x1 + q;
+		IF 
+			compreso_senza_estremi(x_inter, x3, x4) = TRUE
+		THEN
+			IF 
+				compreso_senza_estremi(y_inter, y1, y2) = TRUE AND Compreso_senza_estremi(y_inter, y3, y4) = TRUE
+			THEN
+				SET intersezione = TRUE;
+			END IF;
+		END IF;
+	END IF;
+    
+	RETURN intersezione;
+END $$
+DELIMITER ;
+
 # Questa funzione prende come input le coordinate (x;y) di un vertice e il codice della pianta e vede se è all'interno del perimetro
 DROP FUNCTION IF EXISTS Controllo_Punto_Interno_Perimetro_Pianta;
 DELIMITER $$
-CREATE FUNCTION Controllo_Punto_Interno_Perimetro_Pianta(x FLOAT, y FLOAT, codice_pianta INT)
+CREATE FUNCTION Controllo_Punto_Interno_Perimetro_Pianta(x FLOAT, y FLOAT, codice_pian INT)
 RETURNS BOOL DETERMINISTIC
 BEGIN
-		DECLARE finito INT DEFAULT 0;
-		DECLARE contatore INT DEFAULT 1;
-        DECLARE numero_punti INT DEFAULT 0;
-        DECLARE x0 INT DEFAULT 0;
-        DECLARE x1 INT DEFAULT 0;
-        DECLARE y0 INT DEFAULT 0;
-        DECLARE y1 INT DEFAULT 0;
-        DECLARE intersezione INT DEFAULT 0;
-        DECLARE numero_intersezioni INT DEFAULT 0;
-        
-        SET contatore = (SELECT MIN(Ve.Numero_Vertice)
-							 FROM Vertice Ve INNER JOIN PosizionamentoVano PV ON Ve.Numero_Vertice = PV.Vertice
-											 INNER JOIN Vano Va ON PV.Vano = Va.Codice_Vano
-							 WHERE Ve.Pianta = codice_pianta
-								  AND 
-								   Va.Pianta = codice_pianta
-								  AND
-								   Va.Codice_Vano = codice_vano);
-                                   
-		SET numero_punti = (SELECT MAX(Ve.Numero_Vertice)
-								FROM Vertice Ve INNER JOIN PosizionamentoVano PV ON Ve.Numero_Vertice = PV.Vertice
-								                INNER JOIN Vano Va ON PV.Vano = Va.Codice_Vano
-								WHERE Ve.Pianta = codice_pianta
-									 AND 
-									  Va.Pianta = codice_pianta
-									 AND
-									  Va.Codice_Vano = codice_vano);
-        
-	    ciclo: LOOP
-			IF
-				contatore < numero_punti
-			THEN 
-            BEGIN
-                SET x0 = (SELECT V.X
-						  FROM Vertice V
-						  WHERE V.Pianta = codice_pianta
-							   AND
-								V.Numero_Vertice = contatore);
-			
-				SET y0 = (SELECT V.Y
-						  FROM Vertice V
-						  WHERE V.Pianta = codice_pianta
-							   AND
-								V.Numero_Vertice = contatore);
-				
-				SET x1 = (SELECT V.X
-						  FROM Vertice V
-						  WHERE V.Pianta = codice_pianta
-							   AND
-								V.Numero_Vertice = (contatore+1));
+	DECLARE x0 FLOAT DEFAULT 0;
+	DECLARE x1 FLOAT DEFAULT 0;
+	DECLARE y0 FLOAT DEFAULT 0;
+	DECLARE y1 FLOAT DEFAULT 0;
+    DECLARE v0, v1 INT DEFAULT 0;
+	DECLARE numero_intersezioni INT DEFAULT 0;
+    DECLARE finito INT DEFAULT 0;
+    DECLARE piantina INT DEFAULT codice_pian;
+    
+    DECLARE muri CURSOR FOR
+			SELECT M.V1, M.V2, V1.X, V2.X, V1.Y, V2.Y
+			FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice
+						INNER JOIN Pianta P ON M.Pianta = P.Codice_Pianta
+			WHERE M.Pianta = piantina AND V1.Pianta = piantina AND V2.Pianta = piantina;
+	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
 
-				SET y1 = (SELECT V.Y
-						  FROM Vertice V
-						  WHERE V.Pianta = codice_pianta
-							   AND
-								V.Numero_Vertice = (contatore+1));
-                                
-				IF
-					y0 = y1
-                THEN
-					LEAVE ciclo;
-                END IF;
-								
-				SET intersezione = ((y - y0)/(y1 -y0)*(x1-x0))+x0;
-				
-				IF
-					x < intersezione
-					AND
-					intersezione BETWEEN x0 AND x1
-				THEN
-					SET numero_intersezioni = numero_intersezioni+1;
-				END IF;
-			END;
-            END IF;
-			
-            IF
-				contatore = numero_punti
-			THEN 
-            BEGIN
-                SET x0 = (SELECT V.X
-						  FROM Vertice V
-						  WHERE V.Pianta = codice_pianta
-							   AND
-								V.Numero_Vertice = contatore);
-			
-				SET y0 = (SELECT V.Y
-						  FROM Vertice V
-						  WHERE V.Pianta = codice_pianta
-							   AND
-								V.Numero_Vertice = contatore);
-				
-				SET x1 = (SELECT V.X
-						  FROM Vertice V
-						  WHERE V.Pianta = codice_pianta
-							   AND
-								V.Numero_Vertice = 1);
-
-				SET y1 = (SELECT V.Y
-						  FROM Vertice V
-						  WHERE V.Pianta = codice_pianta
-							   AND
-								V.Numero_Vertice = 1);
-				                                
-				IF
-					y0 = y1
-                THEN
-					LEAVE ciclo;
-                END IF;
-						
-				SET intersezione = ((y - y0)/(y1 -y0)*(x1-x0))+x0;
-				
-				IF
-					x < intersezione
-					AND
-					intersezione BETWEEN x0 AND x1
-				THEN
-					SET numero_intersezioni = numero_intersezioni+1;
-				END IF;
-			END;
-            END IF;
-            
-            IF
-				contatore > numero_punti
-			THEN                
-                LEAVE ciclo;
-            END IF;
-            
-			SET contatore = contatore+1;
-        END LOOP ciclo; 
-        
+	OPEN muri;
+	ciclo: LOOP
+		FETCH muri INTO v0, v1, x0, x1, y0, y1;
 		IF
-			numero_intersezioni % 2 = 0
-		THEN
-			RETURN FALSE;
+			finito = 1
+		THEN   
+			LEAVE ciclo;
 		END IF;
         
-        RETURN TRUE;
+		IF
+			Intersezione(x, y, massimo(x0, x1) + 1, y, x0, y0, x1, y1) = TRUE
+		THEN 
+			SET numero_intersezioni = numero_intersezioni + 1 ;
+		END IF;    
+	END LOOP;
+    CLOSE muri;
+    
+	IF
+		numero_intersezioni % 2 = 0
+	THEN
+		RETURN FALSE;
+	END IF;
+    
+	RETURN TRUE;
+END $$
+DELIMITER ;
+
+# Questa funzione prende come input le coordinate (x;y) di un vertice e il codice della pianta e vede se è all'interno di un muro
+DROP FUNCTION IF EXISTS Controllo_Punto_Su_Muro;
+DELIMITER $$
+CREATE FUNCTION Controllo_Punto_Su_Muro(x FLOAT, y FLOAT, codice_pianta INT)
+RETURNS INT DETERMINISTIC
+BEGIN
+		DECLARE interno_pianta BOOL DEFAULT TRUE;
+		DECLARE finito INT DEFAULT 0;
+        DECLARE v0, v1 INT DEFAULT 0;
+		DECLARE x0, x1, y0, y1 FLOAT DEFAULT 0;
+        DECLARE cod_muro INT DEFAULT 0;
+        DECLARE piantina INT DEFAULT codice_pianta;
+        
+        DECLARE muri CURSOR FOR
+			SELECT M.V1, M.V2, V1.X, V1.Y, V2.X, V2.Y, M.Codice_muro
+			FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice 
+			WHERE M.Pianta = piantina AND V1.Pianta = piantina AND V2.Pianta = piantina;
+		DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
+        
+        OPEN muri;
+        ciclo: LOOP
+			FETCH muri INTO v0, v1, x0, y0, x1, y1, cod_muro;
+            
+            IF 
+				x0 <> x1
+			THEN
+				IF 
+					x BETWEEN minimo(x0, x1) AND massimo(x0, x1) AND y = ((y1 - y0)/(x1 - x0)) * x + y0 - ((y1 - y0)/(x1 - x0)) * x0
+				THEN
+					RETURN cod_muro;
+				END IF;
+			ELSEIF	
+				x0 = x1
+			THEN
+				IF 
+					x = x1 AND y BETWEEN minimo(y0, y1) AND massimo(y0, y1)
+                THEN 
+					RETURN cod_muro;
+				END IF;
+            END IF;
+            
+            IF 
+				finito = 1
+			THEN 
+				LEAVE ciclo;
+			END IF;
+		END LOOP;
+        CLOSE muri;
+        
+		RETURN 0;
 END $$
 DELIMITER ;
 
@@ -690,6 +786,7 @@ BEGIN
         DECLARE numero_intersezioni INT DEFAULT 0;
         DECLARE codice_vano INT; 
         DECLARE minimo INT DEFAULT 1;
+        DECLARE su_muro INT DEFAULT 0;
         
         DECLARE cursore_codici_vano CURSOR FOR
 			SELECT V.Codice_Vano
@@ -697,626 +794,83 @@ BEGIN
 			WHERE V.Pianta = codice_pianta;
         DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
         
-        SELECT Controllo_Punto_Interno_Perimetro_Pianta(x, y, codice_pianta) INTO interno_perimetro;
+        SET interno_perimetro = Controllo_Punto_Interno_Perimetro_Pianta(x, y, codice_pianta);
 	    
+        SET su_muro = Controllo_Punto_Su_Muro(x, y, codice_pianta);
+        
 		IF
-			interno_perimetro = FALSE
+			interno_perimetro = FALSE AND su_muro = 0
 		THEN
 			RETURN FALSE;
 		END IF;
-               
-        OPEN cursore_codici_vano;
-		controllo_vano: LOOP
-			FETCH cursore_codici_vano INTO codice_vano;
-            
-            IF finito = 1 THEN
-				LEAVE controllo_vano;
-			END IF;
-            
-            SET numero_intersezioni = 0;
-            
-            SET contatore = (SELECT MIN(Ve.Numero_Vertice)
-							 FROM Vertice Ve INNER JOIN PosizionamentoVano PV ON Ve.Numero_Vertice = PV.Vertice
-											 INNER JOIN Vano Va ON PV.Vano = Va.Codice_Vano
-							 WHERE Ve.Pianta = codice_pianta
-								  AND 
-								   Va.Pianta = codice_pianta
-								  AND
-								   Va.Codice_Vano = codice_vano);
-                                   
-            SET numero_punti = (SELECT MAX(Ve.Numero_Vertice)
-								FROM Vertice Ve INNER JOIN PosizionamentoVano PV ON Ve.Numero_Vertice = PV.Vertice
-								                INNER JOIN Vano Va ON PV.Vano = Va.Codice_Vano
-								WHERE Ve.Pianta = codice_pianta
-									 AND 
-									  Va.Pianta = codice_pianta
-									 AND
-									  Va.Codice_Vano = codice_vano);
-			
-            SET minimo = contatore;
-            
-			ciclo: LOOP
-					IF
-						contatore < numero_punti
-					THEN 
-					BEGIN
-						SET x0 = (SELECT V.X
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = contatore);
-					
-						SET y0 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = contatore);
-						
-						SET x1 = (SELECT V.X
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = (contatore+1));
-
-						SET y1 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = (contatore+1));
-										
-						IF
-							y0 = y1
-						THEN
-							LEAVE ciclo;
-						END IF;
-										
-						SET intersezione = ((y - y0)/(y1 -y0)*(x1-x0))+x0;
-						
-						IF
-							x < intersezione
-							AND
-							intersezione BETWEEN x0 AND x1
-						THEN
-							SET numero_intersezioni = numero_intersezioni+1;
-						END IF;
-					END;
-					END IF;
-					
-					IF
-						contatore = numero_punti
-					THEN 
-					BEGIN
-						SET x0 = (SELECT V.X
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = contatore);
-					
-						SET y0 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = contatore);
-						
-						SET x1 = (SELECT V.X
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = minimo);
-
-						SET y1 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = minimo);
-														
-						IF
-							y0 = y1
-						THEN
-							LEAVE ciclo;
-						END IF;
-								
-						SET intersezione = ((y - y0)/(y1 - y0)*(x1 - x0))+x0;
-						
-						IF
-							x < intersezione
-							AND
-							intersezione BETWEEN x0 AND x1
-						THEN
-							SET numero_intersezioni = numero_intersezioni+1;
-						END IF;
-					END;
-					END IF;
-					
-					IF
-						contatore > numero_punti
-					THEN                
-						LEAVE ciclo;
-					END IF;
-					
-					SET contatore = contatore+1;
-				END LOOP ciclo; 
-				
-				IF
-					numero_intersezioni % 2 = 0
-				THEN
-					RETURN FALSE;
-				END IF;
-                
-			END LOOP controllo_vano;
-        
-        RETURN TRUE;
+	RETURN TRUE;
 END $$
 DELIMITER ;
 
-# Restituisce TRUE se x è compreso tra y1 e y2 senza però uguagliare y1 o y2, altrimenti restituisce FALSE
-DROP FUNCTION IF EXISTS compreso_senza_estremi;
+# Guarda se i punti inseriti di un Muro sono comuni o dentro quelli di un Muro già inserito
+DROP FUNCTION IF EXISTS Muro_Comune;
 DELIMITER $$
-CREATE FUNCTION compreso_senza_estremi(x FLOAT, y1 FLOAT, y2 FLOAT)
+CREATE FUNCTION Muro_Comune(x FLOAT, y FLOAT, w FLOAT, z FLOAT, pianta INT)
 RETURNS BOOL DETERMINISTIC
 BEGIN
-	DECLARE inter BOOL DEFAULT FALSE;
-    
-	IF
-		x BETWEEN y1 AND y2 AND x <> y1 AND x <> y2
-    THEN
-		SET inter = TRUE ;
-	END IF;
-	RETURN inter;
-END $$
-DELIMITER ;
 
-# Funzione che dato due segmenti in input, restituisce TRUE se si intersecano e FALSE altrimenti
-DROP FUNCTION IF EXISTS Intersezione;
-DELIMITER $$
-CREATE FUNCTION Intersezione(x1 FLOAT, y1 FLOAT, x2 FLOAT, y2 FLOAT, x3 FLOAT, y3 FLOAT, x4 FLOAT, y4 FLOAT)
-RETURNS BOOL DETERMINISTIC 
-BEGIN
-	DECLARE intersezione BOOL DEFAULT FALSE;
-	DECLARE m, q, _m, _q FLOAT DEFAULT 0;
-	DECLARE x_inter, y_inter FLOAT DEFAULT 0;
-    
-	IF 
-		x1 <> x2 AND x3 <> x4
-	THEN 
-		SET m = (y2 - y1) / (x2 - x1) ;
-		SET _m = (y4 - y3) / (x4 - x3) ;
-		SET q = y1 - M * x1 ;
-		SET _q = y3 - M * x3 ;
-		IF 
-			m <> _m
-		THEN
-			SET x_inter = (q - _q) / (_m - m) ;
-			SET y_inter = x_inter * m + q;
-			# Controllo che il punto appartenga ai due segmenti
-			IF 
-				compreso_senza_estremi(x_inter, x1, x2) AND Compreso_senza_estremi(x_inter, x3, x4)
-            THEN
-				IF 
-					compreso_senza_estremi(y_inter, y1, y2) AND Compreso_senza_estremi(y_inter, y3, y4)
-				THEN
-					SET intersezione = TRUE;
-				END IF;
-			END IF;
-		END IF;
-	ELSEIF 
-		x1 <> x2 AND x3 = x4
-	THEN
-		SET m = (y2 - y1) / (x2 - x1) ;
-		SET q = y1 - m * x1 ;
-		SET x_inter = x3;
-		SET y_inter = m * x3 + q;
-		IF 
-			compreso_senza_estremi(x_inter, x1, x2)
-        THEN
-			IF 
-				compreso_senza_estremi(y_inter, y1, y2) AND Compreso_senza_estremi(y_inter, y3, y4)
-			THEN
-					SET intersezione = TRUE;
-			END IF;
-		END IF;
-	ELSEIF 
-		x3 <> x4 AND x1 = x2
-	THEN
-		SET m = (y4 - y3) / (x4 - x3);
-		SET q = y3 - m * x3 ;
-		SET x_inter = x1;
-		SET y_inter = m * x1 + q;
-		IF 
-			compreso_senza_estremi(x_inter, x3, x4)
-		THEN
-			IF 
-				compreso_senza_estremi(y_inter, y1, y2) AND Compreso_senza_estremi(y_inter, y3, y4)
-			THEN
-				SET intersezione = TRUE;
-			END IF;
-		END IF;
-	END IF;
-	RETURN intersezione;
-END $$
-DELIMITER ;
-
-# Controlla che la planimetria sia fattibile
-DROP TRIGGER IF EXISTS CollocazionePianta;
-DELIMITER $$
-CREATE TRIGGER CollocazionePianta
-BEFORE INSERT ON Vertice
-FOR EACH ROW
-BEGIN
-	DECLARE quanti_vertici INT DEFAULT 0;
 	DECLARE finito INT DEFAULT 0;
-	DECLARE ultimo_x, ultimo_y FLOAT DEFAULT 0;
-	DECLARE punti_pianta INT DEFAULT 0;
-    DECLARE v3, v4, x3, y3, x4 ,y4 FLOAT DEFAULT 0;
-    
-    
-    DECLARE muri CURSOR FOR
-			SELECT M.V1, M.V2, V1.X, V1.Y, V2.X, V2.Y
-			FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice 
-			WHERE M.Pianta = NEW.Pianta AND V1.Pianta = NEW.Pianta AND V2.Pianta = NEW.Pianta;
+	DECLARE piantina  INT DEFAULT pianta; 
+    DECLARE x0, y0, x1, y1 FLOAT DEFAULT 0;
+    DECLARE ext BOOL DEFAULT FALSE;
+
+	DECLARE muri CURSOR FOR
+		SELECT V1.X, V1.Y, V2.X, V2.Y, M.esterno
+			FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice
+			WHERE M.Pianta = piantina AND V1.Pianta = piantina AND V2.Pianta = piantina;
 	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
 
-	SET quanti_vertici =
-	(
-		SELECT COUNT(*)
-		FROM Vertice
-		WHERE Pianta = NEW.Pianta
-	);
-
-	SET punti_pianta =
-	(
-		SELECT PuntiPerimetro 
-        FROM Pianta 
-        WHERE Codice_Pianta = NEW.Pianta
-	);
-
-	SET ultimo_x =
-	(
-		SELECT X
-		FROM Vertice
-		WHERE Pianta = NEW.Pianta AND Numero_Vertice = NEW.Numero_Vertice - 1
-	);
-
-	SET ultimo_y =
-	(
-		SELECT Y
-		FROM Vertice
-		WHERE Pianta = NEW.Pianta AND Numero_Vertice = NEW.Numero_Vertice - 1
-	);
-
-	IF quanti_vertici < punti_pianta - 1 AND NEW.Numero_Vertice <> 1
-	THEN
-		OPEN muri;
-		ciclo: LOOP
-		FETCH muri INTO v3, v4, x3, y3, x4 ,y4;
+	OPEN muri;
+	ciclo: LOOP
+		FETCH muri INTO x0, y0, x1, y1, ext;
+        
+        IF 
+			x BETWEEN minimo(x0, x1) AND massimo(x0, x1) AND w BETWEEN minimo(x0, x1) AND massimo(x0, x1)
+            AND y BETWEEN minimo(y0, y1) AND massimo(y0, y1) AND z BETWEEN minimo(y0, y1) AND massimo(y0, y1)
+            AND ext = TRUE
+		THEN 
+			RETURN TRUE;
+		END IF;
+        
         IF 
 			finito = 1
-		THEN 
+		THEN 	
 			LEAVE ciclo;
 		END IF;
-        
-		IF 
-			Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
-		THEN 
-			SIGNAL SQLSTATE '45000' 
-			SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
-		END IF;
-		END LOOP;
-	END IF;
+		
+        END LOOP;
 
-	IF 
-		quanti_vertici = punti_pianta - 1 AND NEW.Numero_Vertice <> 1
-	THEN
-		OPEN muri;
-		ciclo: LOOP
-		FETCH muri INTO v3, v4, x3, y3, x4 ,y4;
-        IF 
-			finito = 1
-		THEN 
-			SET ultimo_x =
-			(
-				SELECT X
-				FROM Vertice
-				WHERE Pianta = NEW.Pianta AND Numero_Vertice = 1
-			);
-			
-			SET ultimo_y =
-			(
-				SELECT Y
-				FROM Vertice
-				WHERE Pianta = NEW.Pianta AND Numero_Vertice = 1
-			);
-            
-			IF 
-				Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
-			THEN 
-				SIGNAL SQLSTATE '45000' 
-                SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
-			END IF;
-            
-			LEAVE ciclo;
-		END IF;
-        
-		IF 
-			Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
-		THEN 
-			SIGNAL SQLSTATE '45000' 
-            SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
-		END IF;
-		END LOOP;
-	END IF;
-END $$
-DELIMITER ;
-
-# Man mano che vengono inseriti i vertici si vengono a formare anche i muri della pianta
-DROP TRIGGER IF EXISTS CreazioneMuriPianta;
-DELIMITER $$
-CREATE TRIGGER CreazioneMuriPianta
-AFTER INSERT ON Vertice
-FOR EACH ROW
-BEGIN
-
-DECLARE ultimo INT DEFAULT 0;
-DECLARE quanti_vertici INT DEFAULT 0;
-DECLARE punti_pianta INT DEFAULT 0;
-
-# INSERIRE UN IF CHE CONTROLLA CHE IL VERTICE INSERITO NON SIA IL PRIMO
-
-	SET quanti_vertici =
-	(
-		SELECT COUNT(*)
-		FROM Vertice
-		WHERE Pianta = NEW.Pianta
-	);
-
-	SET punti_pianta =
-	(
-		SELECT PuntiPerimetro 
-        FROM Pianta 
-        WHERE Codice_Pianta = NEW.Pianta
-	);
-
-	
-	SET ultimo =
-		(
-			SELECT Numero_Vertice
-			FROM Vertice
-			WHERE Numero_Vertice = NEW.Numero_Vertice - 1 
-		);
-
-	IF 
-		quanti_vertici < punti_pianta AND NEW.Numero_Vertice <> 1
-	THEN
-		INSERT INTO Muro(Esterno, V1, V2, Pianta)
-        VALUES (TRUE, Ultimo, NEW.Numero_Vertice, NEW.Pianta);
-	ELSEIF
-		quanti_vertici = punti_pianta AND NEW.Numero_Vertice <> 1
-	THEN
-		INSERT INTO Muro(Esterno, V1, V2, Pianta)
-        VALUES (TRUE, Ultimo, NEW.Numero_Vertice, NEW.Pianta);
-        SET ultimo=
-			(
-				SELECT Numero_Vertice
-				FROM Vertice
-				WHERE Pianta = NEW.Pianta AND Numero_Vertice = 1
-			);
-		INSERT INTO Muro(Esterno, V1, V2, Pianta)
-        VALUES (TRUE, NEW.Numero_Vertice, Ultimo, NEW.Pianta);
-	END IF;
-END $$
-DELIMITER ;
-
-# Questa funzione prende come input le coordinate (x;y) di un vertice e il codice della pianta e vede se è all'interno di un muro
-DROP FUNCTION IF EXISTS Controllo_Punto_Su_Muro;
-DELIMITER $$
-CREATE FUNCTION Controllo_Punto_Su_Muro(x FLOAT, y FLOAT, codice_pianta INT)
-RETURNS BOOL DETERMINISTIC
-BEGIN
-		DECLARE interno_pianta BOOL DEFAULT TRUE;
-		DECLARE finito INT DEFAULT 0;
-		DECLARE contatore INT DEFAULT 1;
-        DECLARE numero_punti INT DEFAULT 0;
-        DECLARE x0 INT DEFAULT 0;
-        DECLARE x1 INT DEFAULT 0;
-        DECLARE y0 INT DEFAULT 0;
-        DECLARE y1 INT DEFAULT 0;
-        DECLARE r_x INT DEFAULT 0;
-        DECLARE r_y INT DEFAULT 0;
-        DECLARE codice_vano INT; 
-        DECLARE minimo INT DEFAULT 1;
-        
-        DECLARE cursore_codici_vano CURSOR FOR
-			SELECT V.Codice_Vano
-			FROM Vano V 
-			WHERE V.Pianta = codice_pianta;
-        DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
-        
-        SELECT Controllo_Punto_Interno_Pianta(x, y, codice_pianta) INTO interno_pianta;
-	    
-		IF
-			interno_perimetro = FALSE
-		THEN
-			RETURN FALSE;
-		END IF;
-               
-        OPEN cursore_codici_vano;
-		controllo_vano: LOOP
-			FETCH cursore_codici_vano INTO codice_vano;
-            
-            IF 
-				finito = 1 
-            THEN
-				LEAVE controllo_vano;
-			END IF;
-            
-            SET contatore = (SELECT MIN(Ve.Numero_Vertice)
-							 FROM Vertice Ve INNER JOIN PosizionamentoVano PV ON Ve.Numero_Vertice = PV.Vertice
-											 INNER JOIN Vano Va ON PV.Vano = Va.Codice_Vano
-							 WHERE Ve.Pianta = codice_pianta
-								  AND 
-								   Va.Pianta = codice_pianta
-								  AND
-								   Va.Codice_Vano = codice_vano);
-                                   
-            SET numero_punti = (SELECT MAX(Ve.Numero_Vertice)
-								FROM Vertice Ve INNER JOIN PosizionamentoVano PV ON Ve.Numero_Vertice = PV.Vertice
-								                INNER JOIN Vano Va ON PV.Vano = Va.Codice_Vano
-								WHERE Ve.Pianta = codice_pianta
-									 AND 
-									  Va.Pianta = codice_pianta
-									 AND
-									  Va.Codice_Vano = codice_vano);
-			
-            SET minimo = contatore;
-            
-			ciclo: LOOP
-					IF
-						contatore < numero_punti
-					THEN 
-					BEGIN
-						SET x0 = (SELECT V.X
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = contatore);
-					
-						SET y0 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = contatore);
-						
-						SET x1 = (SELECT V.X
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = (contatore+1));
-
-						SET y1 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = (contatore+1));
-										
-						IF
-							y0 = y1
-						THEN
-							LEAVE ciclo;
-						END IF;
-										
-						SET r_x = (x-x0)/(x1-x0);
-                        SET r_y = (y-y0)/(y1-y0);
-						
-						IF
-							r_x = r_y
-						THEN
-							RETURN TRUE;
-						END IF;
-					END;
-					END IF;
-					
-					IF
-						contatore = numero_punti
-					THEN 
-					BEGIN
-						SET x0 = (SELECT V.X
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = contatore);
-					
-						SET y0 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = contatore);
-						
-						SET x1 = (SELECT V.X
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = minimo);
-
-						SET y1 = (SELECT V.Y
-								  FROM Vertice V INNER JOIN PosizionamentoVano ON V.Numero_Vertice = PV.Vertice
-								  WHERE V.Pianta = codice_pianta
-									   AND
-                                        PV.Vano = codice_vano
-									   AND
-										V.Numero_Vertice = minimo);
-														
-						IF
-							y0 = y1
-						THEN
-							LEAVE ciclo;
-						END IF;
-								
-						SET r_x = (x-x0)/(x1-x0);
-                        SET r_y = (y-y0)/(y1-y0);
-						
-						IF
-							r_x = r_y
-						THEN
-							RETURN TRUE;
-						END IF;
-					END;
-					END IF;
-					
-					IF
-						contatore > numero_punti
-					THEN                
-						LEAVE ciclo;
-					END IF;
-					
-					SET contatore = contatore+1;
-				END LOOP ciclo;                 
-			END LOOP controllo_vano;
-        
-        RETURN FALSE;
+	RETURN FALSE;
 END $$
 DELIMITER ;
 
 # Funzione che date due date in input restituisce in output la differenza tra queste due date senza contare Sabato e Domenica
 DROP FUNCTION IF EXISTS Differenza_Date_Senza_Weekend;
 DELIMITER $$
-CREATE FUNCTION Differenza_Date_Senza_Weekend(date1 DATE, date2 DATE)
+CREATE FUNCTION Differenza_Date_Senza_Weekend(data1 DATE, data2 DATE)
 RETURNS INT DETERMINISTIC
-BEGIN    
-	RETURN ABS(DATEDIFF(date2, date1)) + 1
-		 - ABS(DATEDIFF(ADDDATE(date2, INTERVAL 1 - DAYOFWEEK(date2) DAY),
-						ADDDATE(date1, INTERVAL 1 - DAYOFWEEK(date1) DAY))) / 7 * 2
-		 - (DAYOFWEEK(IF(date1 < date2, date1, date2)) = 1)
-		 - (DAYOFWEEK(IF(date1 > date2, date1, date2)) = 7);
+BEGIN 
+	DECLARE differenza INT DEFAULT 0;
+	SET differenza = ABS(DATEDIFF(data1, data2)) + 1
+					- ABS(DATEDIFF(ADDDATE(data1, INTERVAL 1 - DAYOFWEEK(data1) DAY),
+									ADDDATE(data2, INTERVAL 1 - DAYOFWEEK(data2) DAY))) / 7 * 2
+					- (DAYOFWEEK(IF(data2 < data1, data2, data1)) = 1)
+					- (DAYOFWEEK(IF(data2 > data1, data2, data1)) = 7);
+	
+    IF
+		data2 < CONCAT(YEAR(data2), '-12-21')
+        AND
+        data1 > CONCAT(YEAR(data1), '-01-07')
+    THEN
+		SET differenza = differenza - DATEDIFF(CONCAT(YEAR(data1), '-01-07'), CONCAT(YEAR(data2), '-12-21'));
+    END IF;
+    
+    RETURN differenza;
 END $$
 DELIMITER ;
 
@@ -1573,7 +1127,7 @@ BEGIN
             NEW.PuntiPerimetro
         THEN
 			SIGNAL SQLSTATE '45000'
-			SET MESSAGE_TEXT = 'Impossibile inserire! Il perimetro delle Piante dello stesso Edificio devono avere tutti gli stessi punti.';
+			SET MESSAGE_TEXT = 'Impossibile inserire! Le Piante dello stesso Edificio devono avere lo stesso numero di punti.';
         END IF;
     END IF;
     
@@ -1597,7 +1151,7 @@ BEGIN
         NEW.PuntiPerimetro <> OLD.PuntiPerimetro
 	THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile aggiornare! I punti del perimetro della Pianta non possono cambiare. Nel caso di errore eliminare e reinserire.';
+        SET MESSAGE_TEXT = 'Impossibile aggiornare! Non si può cambiare. Nel caso di errore eliminare e reinserire.';
     END IF;
     
     IF
@@ -1643,7 +1197,7 @@ BEGIN
         NEW.PuntiPerimetro <> OLD.PuntiPerimetro
 	THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile aggiornare! I punti del perimetro del Vano non possono cambiare. Nel caso di errore eliminare e reinserire.';
+        SET MESSAGE_TEXT = 'Impossibile aggiornare! Non si può cambiare. Nel caso di errore eliminare e reinserire.';
     END IF;
     
 	IF
@@ -1654,6 +1208,186 @@ BEGIN
     END IF;
 END $$
 DELIMITER ;
+
+# Controlla che la planimetria sia fattibile
+DROP TRIGGER IF EXISTS CollocazionePianta;
+DELIMITER $$
+CREATE TRIGGER CollocazionePianta
+BEFORE INSERT ON Vertice
+FOR EACH ROW
+BEGIN
+	DECLARE quanti_vertici INT DEFAULT 0;
+	DECLARE finito INT DEFAULT 0;
+	DECLARE ultimo_x, ultimo_y FLOAT DEFAULT 0;
+	DECLARE punti_pianta INT DEFAULT 0;
+	DECLARE v3, v4, x3, y3, x4 ,y4 FLOAT DEFAULT 0;
+    
+    
+    DECLARE muri CURSOR FOR
+			SELECT M.V1, M.V2, V1.X, V1.Y, V2.X, V2.Y
+			FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice 
+			WHERE M.Pianta = NEW.Pianta AND V1.Pianta = NEW.Pianta AND V2.Pianta = NEW.Pianta;
+	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
+
+	SET quanti_vertici =
+	(
+		SELECT COUNT(*)
+		FROM Vertice
+		WHERE Pianta = NEW.Pianta
+	);
+
+	SET punti_pianta =
+	(
+		SELECT PuntiPerimetro 
+        FROM Pianta
+        WHERE Codice_Pianta = NEW.Pianta
+	);
+
+	SET ultimo_x =
+	(
+		SELECT X
+		FROM Vertice
+		WHERE Pianta = NEW.Pianta AND Numero_Vertice = NEW.Numero_Vertice - 1
+	);
+
+	SET ultimo_y =
+	(
+		SELECT Y
+		FROM Vertice
+		WHERE Pianta = NEW.Pianta AND Numero_Vertice = NEW.Numero_Vertice - 1
+	);
+
+	IF quanti_vertici < punti_pianta - 1 AND NEW.Numero_Vertice <> 1
+	THEN
+		OPEN muri;
+		ciclo: LOOP
+		FETCH muri INTO v3, v4, x3, y3, x4 ,y4;
+		IF 
+			Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
+		THEN 
+			SIGNAL SQLSTATE '45000' 
+			SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
+		END IF;
+        
+        IF
+			(NEW.x BETWEEN minimo(x3, x4) AND massimo(x3, x4) AND NEW.y BETWEEN minimo(y3, y4) AND massimo(y3, y4)) OR (ultimo_x = NEW.x AND ultimo_y = NEW.y)
+		THEN 
+			SIGNAL SQLSTATE '45000' 
+			SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
+		END IF;
+        
+		IF 
+			finito = 1
+		THEN 
+			LEAVE ciclo;
+		END IF;
+		END LOOP;
+	END IF;
+
+	IF 
+		quanti_vertici = punti_pianta - 1 AND NEW.Numero_Vertice <> 1
+	THEN
+		OPEN muri;
+		ciclo: LOOP
+		FETCH muri INTO v3, v4, x3, y3, x4 ,y4;
+		IF 
+			Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
+		THEN 
+			SIGNAL SQLSTATE '45000' 
+            SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
+		END IF;
+        
+		IF 
+			finito = 1
+		THEN 
+			SET ultimo_x =
+			(
+				SELECT X
+				FROM Vertice
+				WHERE Pianta = NEW.Pianta AND Numero_Vertice = 1
+			);
+			
+			SET ultimo_y =
+			(
+				SELECT Y
+				FROM Vertice
+				WHERE Pianta = NEW.Pianta AND Numero_Vertice = 1
+			);
+            
+			IF 
+				Intersezione (NEW.x, NEW.y, ultimo_x, ultimo_y, x3, y3, x4, y4) = TRUE
+			THEN 
+				SIGNAL SQLSTATE '45000' 
+                SET MESSAGE_TEXT = 'Impossibile inserire! Planimetria impossibile!';
+			END IF;
+            
+			LEAVE ciclo;
+		END IF;
+		END LOOP;
+	END IF;
+END $$
+DELIMITER ;
+
+# Man mano che vengono inseriti i vertici si vengono a formare anche i muri della pianta
+DROP TRIGGER IF EXISTS CreazioneMuriPianta;
+DELIMITER $$
+CREATE TRIGGER CreazioneMuriPianta
+AFTER INSERT ON Vertice
+FOR EACH ROW
+BEGIN
+	DECLARE ultimo INT DEFAULT 0;
+	DECLARE quanti_vertici INT DEFAULT 0;
+	DECLARE punti_pianta INT DEFAULT 0;
+
+# INSERIRE UN IF CHE CONTROLLA CHE IL VERTICE INSERITO NON SIA IL PRIMO
+
+	SET quanti_vertici =
+	(
+		SELECT COUNT(*)
+		FROM Vertice
+		WHERE Pianta = NEW.Pianta
+	);
+
+	SET punti_pianta =
+	(
+		SELECT PuntiPerimetro 
+        FROM Pianta 
+        WHERE Codice_Pianta = NEW.Pianta
+	);
+
+	
+	SET ultimo =
+		(
+			SELECT Numero_Vertice
+			FROM Vertice
+			WHERE Numero_Vertice = NEW.Numero_Vertice - 1 
+				 AND
+                  Pianta = NEW.Pianta
+		);
+
+	IF 
+		quanti_vertici < punti_pianta AND NEW.Numero_Vertice <> 1
+	THEN
+		INSERT INTO Muro(Esterno, V1, V2, Pianta)
+        VALUES (TRUE, Ultimo, NEW.Numero_Vertice, NEW.Pianta);
+	ELSEIF
+		quanti_vertici = punti_pianta AND NEW.Numero_Vertice <> 1
+	THEN
+		INSERT INTO Muro(Esterno, V1, V2, Pianta)
+        VALUES (TRUE, Ultimo, NEW.Numero_Vertice, NEW.Pianta);
+        SET ultimo=
+			(
+				SELECT Numero_Vertice
+				FROM Vertice
+				WHERE Pianta = NEW.Pianta AND Numero_Vertice = 1
+			);
+		INSERT INTO Muro(Esterno, V1, V2, Pianta)
+        VALUES (TRUE, NEW.Numero_Vertice, Ultimo, NEW.Pianta);
+	END IF;
+END $$
+DELIMITER ;
+
+
 
 # Controlla che i vertici per la singola pianta siano inseriti in ordine e senza eventuali errori
 DROP TRIGGER IF EXISTS ControlloOrdineInserimentoVertici;
@@ -1676,7 +1410,7 @@ BEGIN
         SET MESSAGE_TEXT = 'Impossibile inserire! Il vertice non è stato inserito in ordine';
     END IF;
 END $$
-DELIMITER ;
+DELIMITER ; 
 
 # Se si elimina un Vertice si elimina il relativo muro e i vertici che hanno un Numero Vertice superiore e la stessa pianta
 DROP TRIGGER IF NOT EXISTS ControlloEliminazioneVertice
@@ -1803,6 +1537,9 @@ BEFORE INSERT ON Vertice
 FOR EACH ROW
 BEGIN
     DECLARE vertici_perimetro INT DEFAULT 0;
+    DECLARE stringa VARCHAR(300) DEFAULT '';
+    
+    SET stringa = CONCAT('Impossibile inserire! Il Controllo non è andato a buon fine sul Vertice ', NEW.Numero_Vertice);
     
     SET vertici_perimetro = (SELECT P.PuntiPerimetro
 							 FROM Pianta P
@@ -1815,7 +1552,8 @@ BEGIN
 			Controllo_Punto_Interno_Pianta(NEW.X, NEW.Y, NEW.Pianta) = FALSE
         THEN
 			SIGNAL SQLSTATE '45000'
-			SET MESSAGE_TEXT = 'Impossibile inserire! Il Controllo non è andato a buon fine';
+            SET MESSAGE_TEXT = stringa;
+			# SET MESSAGE_TEXT = 'Impossibile inserire! Il Controllo non è andato a buon fine';
         END IF;
     END IF;
 END $$
@@ -1844,7 +1582,7 @@ BEGIN
 		punto_ok = FALSE
 	THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! Il vertice non è interno al perimetro o è si trova interno ad una stanza già creata.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Il vertice non è interno al perimetro';
     END IF;
 END $$
 DELIMITER ;
@@ -1863,6 +1601,7 @@ BEGIN
  	DECLARE v1, v2, v1_x, v1_y, v2_x, v2_y INT DEFAULT 0;
 	DECLARE numeroV INT DEFAULT 0;
 	DECLARE primo INT DEFAULT 0;
+    DECLARE in_vano BOOL DEFAULT FALSE;
 
 	DECLARE muri CURSOR FOR
 		SELECT M.V1, M.V2, V1.X, V1.Y, V2.X, V2.Y
@@ -1872,7 +1611,7 @@ BEGIN
 
 	SET ultimo = 
 		(
-			SELECT MAX(PV.Vertice)
+			SELECT IFNULL(MAX(PV.Vertice), -1)
 			FROM PosizionamentoVano PV
 			WHERE PV.Vano = NEW.VANO
 		);
@@ -1907,53 +1646,88 @@ BEGIN
 
 		SET numeroV =
 	(
-		SELECT numVertici
+		SELECT PuntiPerimetro
 		FROM Vano V
-		WHERE V.Codice = NEW.Vano
+		WHERE V.Codice_vano = NEW.Vano
 	);
 	
+    IF 
+		ultimo <> - 1
+    THEN
 	# Cicla Muro con un cursore e guarda che per ogni coppia di vertici l'intersezione sia uguale a false
-	OPEN muri;
-	ciclo: LOOP
-		FETCH muri INTO v1, v2, v1_x, v1_y, v2_x, v2_y;
-			IF
-			finito = 1
-		THEN 
-			SET x2 =
-			(
-				SELECT X
-				FROM Vertice
-				WHERE Numero_Vertice = primo AND Pianta = NEW.Pianta
-			);
-
-			SET y2 =
-			(
-				SELECT Y
-				FROM Vertice
-				WHERE Numero_Vertice = primo AND Pianta = NEW.Pianta
-			);
-
+		OPEN muri;
+		ciclo: LOOP
+			FETCH muri INTO v1, v2, v1_x, v1_y, v2_x, v2_y;
 			SET inter = intersezione(x1, y1, x2, y2, v1_x, v1_y, v2_x, v2_y);
-
 			IF 
-				inter = TRUE
+				inter = TRUE 
 			THEN
 				SIGNAL SQLSTATE '45000'
-				SET MESSAGE_TEXT = 'Impossibile Inserire! Planimetria Irrealizzabile!';
+				SET MESSAGE_TEXT = 'Impossibile Inserire! Sono presenti intersezioni fra muri';
+			END IF;
+            
+            IF
+				(x1 BETWEEN minimo(v1_x, v2_x) AND massimo(v1_x, v2_x) AND y1 BETWEEN minimo(v1_y, v2_y) AND massimo(v1_y, v2_y)) AND
+                EXISTS
+                (
+					SELECT *
+                    FROM PosizionamentoVano PV INNER JOIN PosizionamentoVano _PV ON PV.Vertice = _PV.Vertice
+                    WHERE PV.Pianta = NEW.Pianta AND _PV.Pianta = NEW.Pianta AND PV.Vano = NEW.Vano AND _PV.Vano = NEW.Vano AND PV.Vertice = v1 AND _PV.Vertice = v2
+                )
+                OR (x1 = y1 AND x2=y2)
+			THEN
+				SIGNAL SQLSTATE '45000'
+				SET MESSAGE_TEXT = 'Impossibile Inserire! Il punto è su un muro del vano in questione!';
+			END IF;
+            
+			IF
+				finito = 1
+			THEN 
+				SET x2 =
+				(
+					SELECT X
+					FROM Vertice
+					WHERE Numero_Vertice = primo AND Pianta = NEW.Pianta
+				);
 
-			LEAVE ciclo;
-            END IF;
-		END IF;
-        
-		SET inter = intersezione(x1, y1, x2, y2, v1_x, v1_y, v2_x, v2_y);
-		IF 
-			inter = TRUE
-		THEN
-			SIGNAL SQLSTATE '45000'
-			SET MESSAGE_TEXT = 'Impossibile Inserire! Planimetria Irrealizzabile!';
-		END IF;
-	END LOOP;
-	CLOSE muri;
+				SET y2 =
+				(
+					SELECT Y
+					FROM Vertice
+					WHERE Numero_Vertice = primo AND Pianta = NEW.Pianta
+				);
+
+				SET inter = intersezione(x1, y1, x2, y2, v1_x, v1_y, v2_x, v2_y);
+
+				IF 
+					inter = TRUE
+				THEN
+					SIGNAL SQLSTATE '45000'
+					SET MESSAGE_TEXT = 'Impossibile Inserire! Planimetria Irrealizzabile!';
+				END IF;
+			
+				 IF
+				(x1 BETWEEN minimo(v1_x, v2_x) AND massimo(v1_x, v2_x) AND y1 BETWEEN minimo(v1_y, v2_y) AND massimo(v1_y, v2_y)) AND
+                EXISTS
+                (
+					SELECT *
+                    FROM PosizionamentoVano PV INNER JOIN PosizionamentoVano _PV ON PV.Vertice = _PV.Vertice
+                    WHERE PV.Pianta = NEW.Pianta AND _PV.Pianta = NEW.Pianta AND PV.Vano = NEW.Vano AND _PV.Vano = NEW.Vano AND PV.Vertice = v1 AND _PV.Vertice = v2
+                )
+                OR (x1 = y1 AND x2=y2)
+				THEN
+					SIGNAL SQLSTATE '45000'
+					SET MESSAGE_TEXT = 'Impossibile Inserire! Il punto è su un muro del vano in questione!';
+				END IF;
+            
+				
+            
+				LEAVE ciclo;
+                
+			END IF;
+		END LOOP;
+		CLOSE muri;
+    END IF;
 END $$
 DELIMITER ;
 
@@ -1968,43 +1742,104 @@ BEGIN
 	DECLARE numeroV INT DEFAULT 0;
 	DECLARE primo INT DEFAULT 0;
 	DECLARE min_x, min_y, max_x, max_y INT DEFAULT 0;
-
+    DECLARE ex BOOL DEFAULT FALSE;
+    DECLARE x_ultimo, y_ultimo, x_nuovo, y_nuovo, x_primo, y_primo FLOAT DEFAULT 0;
+    
+		SET x_nuovo =
+        (
+			SELECT x
+            FROM Vertice 
+            WHERE Pianta = NEW.Pianta AND Numero_vertice = NEW.Vertice
+        );
+        
+        SET y_nuovo =
+        (
+			SELECT y
+            FROM Vertice 
+            WHERE Pianta = NEW.Pianta AND Numero_vertice = NEW.Vertice
+        );
+	
 		SET ultimo = 
 		(
-			SELECT MIN(PV.Vertice)
+			SELECT IFNULL(MAX(PV.Vertice),0)
 			FROM PosizionamentoVano PV
-			WHERE PV.Vano = NEW.VANO
+			WHERE PV.Vano = NEW.Vano AND PV.Vertice <> NEW.Vertice
 		);
+
+		SET x_ultimo =
+        (
+			SELECT x
+            FROM Vertice 
+            WHERE Pianta = NEW.Pianta AND Numero_vertice = ultimo
+        );
+        
+        SET y_ultimo =
+        (
+			SELECT y
+            FROM Vertice 
+            WHERE Pianta = NEW.Pianta AND Numero_vertice = ultimo
+        );
 
 		SET quanti =
 		(
-			SELECT COUNT(*)
+			SELECT IFNULL(COUNT(*), 0)
 			FROM PosizionamentoVano P
 			WHERE P.Vano = NEW.Vano
 		);
 
 		SET numeroV =
 		(
-			SELECT numVertici
+			SELECT PuntiPerimetro
 			FROM Vano V
-			WHERE V.Codice = NEW.Vano
+			WHERE V.Codice_vano = NEW.Vano
 		);
 
-		INSERT INTO Muro
-		VALUES (FALSE, ultimo, NEW.Vertice, NEW.Pianta) ;
-
+		IF 
+			ultimo <> 0
+		THEN
+        
+			IF 
+				Muro_Comune(x_nuovo, y_nuovo, x_ultimo, y_ultimo, NEW.Pianta)
+            THEN
+				SET ex = true;
+			END IF;
+            
+			INSERT INTO Muro(Esterno, V1, V2, Pianta)
+			VALUES (ex, ultimo, NEW.Vertice, NEW.Pianta) ;
+		END IF;
+        
 		IF 
 			numeroV = quanti
 		THEN
+        
 			SET primo =
 			(
 				SELECT MIN(Vertice)
 				FROM PosizionamentoVano
 				WHERE Vano = NEW.Vano
 			);
+            
+            SET x_primo =
+            (
+				SELECT x
+                FROM Vertice
+				WHERE Pianta = NEW.Pianta AND Numero_vertice = primo
+            );
+            
+            SET y_primo =
+            (
+				SELECT y
+                FROM Vertice
+				WHERE Pianta = NEW.Pianta AND Numero_vertice = primo
+            );
 
-			INSERT INTO Muro
-			VALUES (FALSE, NEW.vertice, primo, NEW.Pianta) ;
+			IF 
+				Muro_Comune(x_primo, y_primo, x_nuovo, y_nuovo, NEW.Pianta)
+            THEN
+				SET ex = true;
+			END IF;
+			INSERT INTO Muro(Esterno, V1, V2, Pianta)
+			VALUES (ex, NEW.Vertice, primo, NEW.Pianta) ;
 
 			SET min_x = 
 				(
@@ -2035,12 +1870,12 @@ BEGIN
 				);
 		
 			UPDATE Vano 
-			SET Larghezza = ( max_x - min_x ) 
-			WHERE Codice = NEW.Vano;
+			SET LarghezzaMax = ( max_x - min_x ) 
+			WHERE Codice_vano = NEW.Vano;
 		
 			UPDATE Vano
-			SET Lunghezza = ( max_y - min_y )
-			WHERE Codice = NEW.Vano;
+			SET LunghezzaMax = ( max_y - min_y )
+			WHERE Codice_vano = NEW.Vano;
 		END IF ;
 END $$
 DELIMITER ;
@@ -2059,14 +1894,14 @@ BEGIN
 	(
 		SELECT IFNULL(COUNT(*), 0)
 		FROM PosizionamentoVano PV
-		WHERE P.Vano = NEW.Vano
+		WHERE PV.Vano = NEW.Vano
 	);
 
 	SET num_vertici = 
 	(
 		SELECT V.PuntiPerimetro
 		FROM Vano V
-		where V.Codice_Vano = NEW.Vano
+		WHERE V.Codice_Vano = NEW.Vano
 	);
 
 	IF 
@@ -2233,15 +2068,153 @@ BEGIN
 END $$
 DELIMITER ;
 
+# Controlla che l'Apertura si trovi nello stesso Vano del Muro
+DROP TRIGGER IF EXISTS ControlloCorrispondenzaAperturaVano;
+DELIMITER $$
+CREATE TRIGGER ControlloCorrispondenzaAperturaVano
+BEFORE INSERT ON PuntoAccesso
+FOR EACH ROW
+BEGIN    
+    DECLARE x1, y1, x2, y2 FLOAT DEFAULT 0;
+    DECLARE v1_x, v1_y, v2_x, v2_y FLOAT DEFAULT 0;
+    DECLARE muro, pianta INT DEFAULT 0;
+    
+    # CONTROLLARE CHE IL MURO SU CUI E' PRESENTE L'APERTURA FACCIA PARTE DEL VANO INSERITO
+    
+    SET muro = (SELECT M.Codice_Muro
+				FROM Muro M INNER JOIN Apertura A ON M.Codice_Muro = A.Muro
+                WHERE A.Codice_Apertura = NEW.Apertura);
+                
+	SET pianta = (SELECT P.Codice_Pianta
+				  FROM Pianta P INNER JOIN Vano V ON P.Codice_Pianta = V.Pianta
+                  WHERE V.Codice_Vano = NEW.Vano);
+    
+    SET x1 =
+    (
+		SELECT x1
+        FROM Apertura
+		WHERE Codice_apertura = NEW.Apertura
+    );
+    
+    SET y1 =
+    (
+		SELECT y1
+        FROM Apertura
+		WHERE Codice_apertura = NEW.Apertura
+    );
+    
+    SET x2 =
+    (
+		SELECT x2
+        FROM Apertura
+		WHERE Codice_apertura = NEW.Apertura
+    );
+    
+    SET y2 =
+    (
+		SELECT y2
+        FROM Apertura
+		WHERE Codice_apertura = NEW.Apertura
+    );
+    
+    SET v1_x =
+    (
+		SELECT V.x
+        FROM Muro M INNER JOIN Vertice V ON V.Numero_vertice = M.v1
+        WHERE M.Pianta = V1.Pianta AND M.Codice_muro = muro
+    );
+	
+    SET v1_y =
+    (
+		SELECT V.y
+        FROM Muro M INNER JOIN Vertice V ON V2.Numero_vertice = M.v1
+        WHERE M.Pianta = V1.Pianta AND M.Codice_muro = muro
+    );
+    
+    SET v2_x =
+    (
+		SELECT V.x
+        FROM Muro M INNER JOIN Vertice V ON V.Numero_vertice = M.v1
+        WHERE M.Pianta = V2.Pianta AND M.Codice_muro = muro
+    );
+    
+    SET v2_y =
+    (
+		SELECT V.y
+        FROM Muro M INNER JOIN Vertice V ON V.Numero_vertice = M.v1
+        WHERE M.Pianta = V2.Pianta AND M.Codice_muro = muro
+    );
+    
+	IF
+		(x1 BETWEEN minimo(v1_x, v2_x) AND massimo(v1_x, v2_x) AND y1 BETWEEN minimo(v1_y, v2_y) AND massimo(v1_y, v2_y)) = FALSE 
+        AND
+        (x2 BETWEEN minimo(v1_x, v2_x) AND massimo(v1_x, v2_x) AND y2 BETWEEN minimo(v1_y, v2_y) AND massimo(v1_y, v2_y)) = FALSE 
+        AND
+		EXISTS
+		(
+			SELECT *
+			FROM PosizionamentoVano PV INNER JOIN PosizionamentoVano _PV ON PV.Vertice = _PV.Vertice
+			WHERE PV.Pianta = pianta AND _PV.Pianta = pianta AND PV.Vano = NEW.Vano AND _PV.Vano = NEW.Vano AND PV.Vertice = v1 AND _PV.Vertice = v2
+		)
+	THEN 
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Impossibile inserire! Apertura non è adiacente al Vano!';
+    END IF;
+END $$
+DELIMITER ;
+
 # Controllo l'Inserimento del Tipo di Apertura, che l'apertura sia su  
-# Controllo_Punto_Su_Muro(x FLOAT, y FLOAT, codice_pianta INT)
 DROP TRIGGER IF EXISTS ControlloInserimentoApertura;
 DELIMITER $$
 CREATE TRIGGER ControlloInserimentoApertura
 BEFORE INSERT ON Apertura
 FOR EACH ROW
 BEGIN    
-		
+	DECLARE v1_x, v2_x, v1_y, v2_y FLOAT DEFAULT 0;
+    DECLARE finito INT DEFAULT 0;
+    DECLARE ext BOOL DEFAULT 0;
+    
+	DECLARE aperture CURSOR FOR
+				SELECT 	x1, y1, x2, y2
+                FROM Apertura
+                WHERE Muro = NEW.Muro;
+	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
+			
+	SET ext =
+    (
+		SELECT Esterno
+        FROM Muro
+        WHERE codice_muro = NEW.Muro
+    );
+            
+	SET v1_x =
+    (
+		SELECT V.x
+        FROM Muro M INNER JOIN Vertice V ON V.Numero_vertice = M.v1
+        WHERE M.Pianta = V1.Pianta AND M.Codice_muro = NEW.Muro
+    );
+	
+    SET v1_y =
+    (
+		SELECT V.y
+        FROM Muro M INNER JOIN Vertice V ON V2.Numero_vertice = M.v1
+        WHERE M.Pianta = V1.Pianta AND M.Codice_muro = NEW.Muro
+    );
+    
+    SET v2_x =
+    (
+		SELECT V.x
+        FROM Muro M INNER JOIN Vertice V ON V.Numero_vertice = M.v1
+        WHERE M.Pianta = V2.Pianta AND M.Codice_muro = NEW.Muro
+    );
+    
+    SET v2_y =
+    (
+		SELECT V.y
+        FROM Muro M INNER JOIN Vertice V ON V.Numero_vertice = M.v1
+        WHERE M.Pianta = V2.Pianta AND M.Codice_muro = NEW.Muro
+    );
+    
 	IF
 		NEW.Tipologia <> 'Porta'
         AND
@@ -2256,6 +2229,56 @@ BEGIN
 		SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Impossibile inserire! Le aperture possono essere solo Porta, Finestra, Porta-Finestra, Arco o Spazio Vuoto.';
     END IF;
+        
+    IF
+		(NEW.x1 BETWEEN minimo(v1_x, v2_x) AND massimo(v1_x, v2_x) AND NEW.y1 BETWEEN minimo(v1_y, v2_y) AND massimo(v1_y, v2_y)) = FALSE 
+        OR 
+        (NEW.x2 BETWEEN minimo(v1_x, v2_x) AND massimo(v1_x, v2_x) AND NEW.y2 BETWEEN minimo(v1_y, v2_y) AND massimo(v1_y, v2_y)) = FALSE
+		OR 
+        (NEW.x1 = NEW.x2 AND NEW.y1=NEW.y2) # vertici coincidenti
+        OR 
+        (NEW.x1 = v1_x AND NEW.y1 = v1_y)   # vertici coincidenti con i vertici del muro
+        OR 
+        (NEW.x1 = v2_x AND NEW.y1 = v2_y)
+        OR 
+        (NEW.x2 = v1_x AND NEW.y2 = v1_y)
+        OR 
+        (NEW.x2 = v2_x AND NEW.y2 = v2_y)
+	THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile Inserire! I vertici dell apertura non sono posizionati correttamente!';
+	END IF;    
+	
+	# CONTROLLARE CHE LE APERTURE NON SI INROCINO
+    
+    OPEN aperture;
+    ciclo: LOOP
+		FETCH aperture INTO v1_x, v1_y, v2_x, v2_y;
+        
+        IF
+			(NEW.x1 BETWEEN minimo(v1_x, v2_x) AND massimo(v1_x, v2_x) AND NEW.y1 BETWEEN minimo(v1_y, v2_y) AND massimo(v1_y, v2_y)) = FALSE 
+			OR 
+            (NEW.x2 BETWEEN minimo(v1_x, v2_x) AND massimo(v1_x, v2_x) AND NEW.y2 BETWEEN minimo(v1_y, v2_y) AND massimo(v1_y, v2_y)) = FALSE
+		THEN
+			SIGNAL SQLSTATE '45000'
+			SET MESSAGE_TEXT = 'Impossibile Inserire! I vertici dell apertura non sono posizionati correttamente!';
+		END IF;    
+			
+        IF 
+			finito = 1
+		THEN 
+			LEAVE ciclo;
+		END IF;
+        
+	END LOOP;
+	CLOSE aperture;
+        
+	IF 
+		NEW.Tipologia = 'Finestra' OR NEW.Tipologia = 'Porta-Finestra' OR NEW.Balcone = TRUE AND ext = FALSE
+	THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile Inserire! La tipologia selezionata deve dare sull esterno!';
+    END IF;    
 END $$
 DELIMITER ;
 
@@ -2336,7 +2359,7 @@ BEGIN
          WHERE R.Progetto = NEW.ID_Progetto) < 2
     THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile aggiornare la Data di Fine del Progetto! In Responsabilità ci devono essere almeno 2 Responsabili.';
+        SET MESSAGE_TEXT = 'Impossibile aggiornare! In Responsabilità ci devono essere almeno 2 Responsabili.';
     END IF;
 END $$
 DELIMITER ;
@@ -2350,6 +2373,13 @@ FOR EACH ROW
 BEGIN
 	DECLARE costruzione BOOL DEFAULT FALSE; # Sarà vero se l'Edificio di cui si inserisce il Progetto Edilizio è stato costruito o è in costruzione
 	DECLARE costruito BOOL DEFAULT FALSE; # Sarà vero se l'Edificio di cui si inserisce il Progetto Edilizio è stato costruito
+    DECLARE data_fine DATE DEFAULT NULL;
+    
+    SET data_fine = (SELECT PE.DataFine
+					 FROM ProgettoEdilizio PE
+					 WHERE PE.Edificio = NEW.Edificio
+						  AND
+						   PE.Tipo = 'Costruzione');
     
     IF 
 		(SELECT IFNULL(COUNT(*), 0)
@@ -2379,7 +2409,7 @@ BEGIN
          NEW.Tipo <> 'Riparazione')
 	THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! Gli stati di un Progetto Edilizio devono essere Costruzione o Riparazione.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Gli stati di un Progetto devono essere Costruzione o Riparazione.';
     END IF;
     
     IF
@@ -2399,6 +2429,17 @@ BEGIN
 		SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Impossibile inserire! Edificio non inserito o in costruzione.';
     END IF;    
+    
+    IF
+		(data_fine IS NULL
+         OR
+         NEW.DataInizio < data_fine)
+        AND
+        NEW.Tipo = 'Riparazione'
+    THEN
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Impossibile inserire! Edificio non inserito o in costruzione.';
+    END IF;
 END $$
 DELIMITER ;
 
@@ -2459,7 +2500,7 @@ BEGIN
         NEW.DataInizio
     THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! La Data di Inizio dello Stadio di Avanzamento inserito deve essere maggiore rispetto a quella dello Stadio precedente.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Inizio dello Stadio deve essere maggiore rispetto a quello precedente.';
 	END IF;
 END $$
 DELIMITER ;
@@ -2490,7 +2531,7 @@ BEGIN
         NEW.DataInizio
     THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! La Data di Inizio dello Stadio di Avanzamento inserito deve essere maggiore rispetto a quella dello Stadio precedente.';
+        SET MESSAGE_TEXT = 'Impossibile aggiornare! Inizio dello Stadio deve essere maggiore rispetto a quello precedente.';
 	END IF;
 END $$
 DELIMITER ;
@@ -2541,7 +2582,7 @@ BEGIN
          NEW.NumeroMinimoLavoratori > NEW.NumeroMassimoLavoratori
 	THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! Il minimo numero di lavoratori non può essere minore di 2 e il massimo numero di lavoratori non può essere maggiore di 30.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Il minimo numero di lavoratori < 2 o massimo numero di lavoratori > 30.';
     END IF;
 END $$
 DELIMITER ;
@@ -2561,7 +2602,7 @@ BEGIN
          NEW.NumeroMinimoLavoratori > NEW.NumeroMassimoLavoratori
 	THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile aggiornare! Il minimo numero di lavoratori non può essere minore di 2 e il massimo numero di lavoratori non può essere maggiore di 30.';
+        SET MESSAGE_TEXT = 'Impossibile aggiornare!  Il minimo numero di lavoratori < 2 o massimo numero di lavoratori > 30.';
     END IF;
 END $$
 DELIMITER ;
@@ -2620,7 +2661,7 @@ BEGIN
                                 S.Progetto = NEW.Progetto)
 	THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! La Data di Inzio del Lavoro non può essere minore della Data di Inizio dello Stadio di Avanzamento.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Inzio del Lavoro non può essere minore di Inizio dello Stadio.';
 	ELSEIF 
 		NEW.DataFine > (SELECT S.DataFine
 						  FROM StadioDiAvanzamento S
@@ -2629,7 +2670,7 @@ BEGIN
                                 S.Progetto = NEW.Progetto)
 	THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! La Data di Fine del Lavoro non può essere maggiore della Data di Fine dello Stadio di Avanzamento.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Fine del Lavoro non può essere maggiore di Fine dello Stadio.';
     END IF;
 END $$
 DELIMITER ;
@@ -2682,7 +2723,7 @@ BEGIN
          WHERE T.Nome = NEW.TipologiaDiLavoro)
 	THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile aggiornare! Non è stato inserito il numero minimo di lavoratori previsto per questo lavoro in Turni di Lavoro.';	
+        SET MESSAGE_TEXT = 'Impossibile aggiornare! Non è presente il numero minimo di lavoratori previsto in Turni di Lavoro.';	
 	END IF;
     
 	IF 
@@ -3226,6 +3267,13 @@ BEGIN
 		SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Impossibile inserire! Orario di Fine deve avere una Data consona a quella di Inizio del Lavoro.';
     END IF;
+    
+    IF
+		TIMEDIFF(NEW.OrarioFine, NEW.OrarioInizio) > '8:00:00'
+    THEN
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Impossibile inserire! Un lavoratore non può lavorare per più di 8 ore di fila';
+    END IF;
 END $$
 DELIMITER ;
 
@@ -3261,6 +3309,13 @@ BEGIN
     THEN
 		SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Impossibile aggiornare! Orario di Fine deve avere una Data consona a quella di Inizio del Lavoro.';
+    END IF;
+    
+    IF
+		TIMEDIFF(NEW.OrarioFine, NEW.OrarioInizio) > '8:00:00'
+    THEN
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Impossibile aggiornare! Un lavoratore non può lavorare per più di 8 ore di fila';
     END IF;
 END $$
 DELIMITER ;
@@ -3316,6 +3371,13 @@ BEGIN
 		SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Impossibile inserire! Orario di Fine deve avere una Data consona a quella di Inizio del Lavoro.';
     END IF;
+    
+    IF
+		TIMEDIFF(NEW.OrarioFine, NEW.OrarioInizio) > '8:00:00'
+    THEN
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Impossibile inserire! Un capocantiere non può lavorare per più di 8 ore di fila';
+    END IF;
 END $$
 DELIMITER ;
 
@@ -3351,6 +3413,13 @@ BEGIN
     THEN
 		SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Impossibile aggiornare! Orario di Fine deve avere una Data consona a quella di Inizio del Lavoro.';
+    END IF;
+    
+	IF
+		TIMEDIFF(NEW.OrarioFine, NEW.OrarioInizio) > '8:00:00'
+    THEN
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Impossibile aggiornare! Un capocantiere non può lavorare per più di 8 ore di fila';
     END IF;
 END $$
 DELIMITER ;
@@ -3406,6 +3475,13 @@ BEGIN
 		SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Impossibile inserire! Orario di Fine deve avere una Data consona a quella di Inizio del Lavoro.';
     END IF;
+    
+	IF
+		TIMEDIFF(NEW.OrarioFine, NEW.OrarioInizio) > '8:00:00'
+    THEN
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Impossibile inserire! Un responsabile non può lavorare per più di 8 ore di fila';
+    END IF;
 END $$
 DELIMITER ;
 
@@ -3442,6 +3518,13 @@ BEGIN
 		SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Impossibile aggiornare! Orario di Fine deve avere una Data consona a quella di Inizio del Lavoro.';
     END IF;
+    
+    IF
+		TIMEDIFF(NEW.OrarioFine, NEW.OrarioInizio) > '8:00:00'
+    THEN
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Impossibile aggiornare! Un responsabile non può lavorare per più di 8 ore di fila';
+    END IF;
 END $$
 DELIMITER ;
 
@@ -3458,7 +3541,7 @@ BEGIN
         NEW.CoefficienteRischio > 1
 	THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! Il Coefficiente di Rischio non può essere nullo ne maggiore di 1.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Il Coefficiente di Rischio non può essere 0 né maggiore di 1.';
     END IF;
 END $$
 DELIMITER ;
@@ -3476,7 +3559,7 @@ BEGIN
         NEW.CoefficienteRischio > 1
 	THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile aggiornare! Il Coefficiente di Rischio non può essere nullo ne maggiore di 1.';
+        SET MESSAGE_TEXT = 'Impossibile aggiornare! Il Coefficiente di Rischio non può essere 0 né maggiore di 1.';
     END IF;
 END $$
 DELIMITER ;
@@ -3522,7 +3605,7 @@ BEGIN
         NEW.Pericolo <> 'Valanga'
     THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! I Pericoli possibili sono: Allargamento Crepa, Alluvione, Ciclone, Innalzamento Umidità Esterna, Innalzamento Umidità Interna, Eruzione Vulcanica, Incendio, Impatto Meteorico, Inondazione, Frana, Ondata di Caldo, Terremoto, Tornado, Valanga';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Pericolo non valido!';
     END IF;	
 END $$;
 DELIMITER ;
@@ -3568,7 +3651,7 @@ BEGIN
         NEW.Nome <> 'Valanga'
     THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! Le Calamità possibili sono: Allargamento Crepa, Alluvione, Ciclone, Innalzamento Umidità Esterna, Innalzamento Umidità Interna, Eruzione Vulcanica, Incendio, Impatto Meteorico, Inondazione, Frana, Ondata di Caldo, Terremoto, Tornado, Valanga';
+        SET MESSAGE_TEXT = 'Impossibile aggiornare! Pericolo non valido!';
     END IF;	
     
     IF
@@ -3630,7 +3713,7 @@ BEGIN
         NEW.Nome <> 'Valanga'
     THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile aggiornare! Le Calamità possibili sono: Allargamento Crepa, Alluvione, Ciclone, Innalzamento Umidità Esterna, Innalzamento Umidità Interna, Eruzione Vulcanica, Incendio, Impatto Meteorico, Inondazione, Frana, Ondata di Caldo, Terremoto, Tornado, Valanga';
+        SET MESSAGE_TEXT = 'Impossibile aggiornare!Pericolo non valido!';
     END IF;	
     
     IF
@@ -3873,7 +3956,7 @@ BEGIN
         NEW.QuantitaStoccata <> NEW.QuantitaComprata
 	THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! Non puoi inserire un lotto nuovo senza nulla o un lotto con una quantità comprata diversa da quella stoccata.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Lotto non valido.';
 	END IF;
     
     IF
@@ -3959,7 +4042,7 @@ BEGIN
         NEW.QuantitaStoccata <> NEW.QuantitaComprata
 	THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! Non puoi inserire un lotto nuovo senza nulla o un lotto con una quantità comprata diversa da quella stoccata.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Lotto non valido.';
 	END IF;
     
 	IF
@@ -4045,7 +4128,7 @@ BEGIN
         NEW.QuantitaStoccata <> NEW.QuantitaComprata
 	THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! Non puoi inserire un lotto nuovo senza nulla o un lotto con una quantità comprata diversa da quella stoccata.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Lotto non valido.';
 	END IF;
     
 	IF
@@ -4131,7 +4214,7 @@ BEGIN
         NEW.QuantitaStoccata <> NEW.QuantitaComprata
 	THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! Non puoi inserire un lotto nuovo senza nulla o un lotto con una quantità comprata diversa da quella stoccata.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Lotto non valido.';
 	END IF;
     
 	IF
@@ -4231,7 +4314,7 @@ BEGIN
         NEW.QuantitaStoccata <> NEW.QuantitaComprata
 	THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! Non puoi inserire un lotto nuovo senza nulla o un lotto con una quantità comprata diversa da quella stoccata.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! Quantita Errata.';
 	END IF;
         
 	IF
@@ -4367,7 +4450,7 @@ BEGIN
         )
     THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! La quantità richiesta è maggiore della quantità stoccata in questo lotto o è nulla.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! La quantità richiesta è incorretta.';
 	ELSEIF
 		NEW.Quantita
         <=
@@ -4380,6 +4463,50 @@ BEGIN
 		UPDATE AltriMateriali
         SET QuantitaStoccata = QuantitaStoccata - NEW.Quantita
         WHERE Codice_Lotto = NEW.Lotto_Altri_Materiali;
+    END IF;
+END $$
+DELIMITER ;
+
+# Impedisce di inserire un Lotto in Impiego Altri Materiali se la sua data di compravendita è maggiore rispetto a quella di fine Lavoro
+DROP TRIGGER IF EXISTS ControllaInserimentoDataImpiegoAltriMateriali;
+DELIMITER $$
+CREATE TRIGGER ControllaInserimentoDataImpiegoAltriMateriali
+BEFORE INSERT ON ImpiegoAltriMateriali
+FOR EACH ROW
+BEGIN
+    IF
+		(SELECT AM.DataAcquisto
+         FROM AltriMateriali AM
+         WHERE AM.Codice_Lotto = NEW.Lotto_Altri_Materiali)
+		>
+		(SELECT IFNULL(L.DataFine, '2000-01-01')
+		 FROM Lavoro L
+		 WHERE L.Codice_Lavoro = NEW.Lavoro)
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Lotto comprato dopo la fine del lavoro.';
+    END IF;
+END $$
+DELIMITER ;
+
+# Impedisce di aggiornare un Lotto in Impiego Altri Materiali se la sua data di compravendita è maggiore rispetto a quella di fine Lavoro
+DROP TRIGGER IF EXISTS ControllaAggiornamentoDataImpiegoAltriMateriali;
+DELIMITER $$
+CREATE TRIGGER ControllaAggiornamentoDataImpiegoAltriMateriali
+BEFORE UPDATE ON ImpiegoAltriMateriali
+FOR EACH ROW
+BEGIN
+    IF
+		(SELECT AM.DataAcquisto
+         FROM AltriMateriali AM
+         WHERE AM.Codice_Lotto = NEW.Lotto_Altri_Materiali)
+		>
+		(SELECT L.DataFine
+		 FROM Lavoro L
+		 WHERE L.Codice_Lavoro = NEW.Lavoro)
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile aggiornare! Lotto comprato dopo la fine del lavoro.';
     END IF;
 END $$
 DELIMITER ;
@@ -4404,7 +4531,7 @@ BEGIN
 			)
 		THEN
 			SIGNAL SQLSTATE '45000'
-			SET MESSAGE_TEXT = 'Impossibile aggiornare! La quantità richiesta è maggiore della quantità stoccata in questo lotto o è nulla.';
+			SET MESSAGE_TEXT = 'Impossibile aggiornare! La quantità richiesta è incorretta.';
 		ELSEIF
 			(NEW.Quantita-OLD.Quantita)
 			<=
@@ -4447,7 +4574,7 @@ BEGIN
         )
     THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! La quantità richiesta è maggiore della quantità stoccata in questo lotto o è nulla.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! La quantità richiesta è incorretta.';
 	ELSEIF
 		NEW.Quantita
         <=
@@ -4460,6 +4587,50 @@ BEGIN
 		UPDATE Intonaco
         SET QuantitaStoccata = QuantitaStoccata - NEW.Quantita
         WHERE Codice_Lotto = NEW.Lotto_Intonaco;
+    END IF;
+END $$
+DELIMITER ;
+
+# Impedisce di inserire un Lotto in Impiego Intonaco se la sua data di compravendita è maggiore rispetto a quella di fine Lavoro
+DROP TRIGGER IF EXISTS ControllaInserimentoDataImpiegoIntonaco;
+DELIMITER $$
+CREATE TRIGGER ControllaInserimentoDataImpiegoIntonaco
+BEFORE INSERT ON ImpiegoIntonaco
+FOR EACH ROW
+BEGIN
+    IF
+		(SELECT I.DataAcquisto
+         FROM Intonaco I
+         WHERE I.Codice_Lotto = NEW.Lotto_Intonaco)
+		>
+		(SELECT IFNULL(L.DataFine, '2000-01-01')
+		 FROM Lavoro L
+		 WHERE L.Codice_Lavoro = NEW.Lavoro)
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Lotto comprato dopo la fine del lavoro.';
+    END IF;
+END $$
+DELIMITER ;
+
+# Impedisce di aggiornare un Lotto in Impiego Intonaco se la sua data di compravendita è maggiore rispetto a quella di fine Lavoro
+DROP TRIGGER IF EXISTS ControllaAggiornamentoDataImpiegoIntonaco;
+DELIMITER $$
+CREATE TRIGGER ControllaAggiornamentoDataImpiegoIntonaco
+BEFORE UPDATE ON ImpiegoIntonaco
+FOR EACH ROW
+BEGIN
+    IF
+		(SELECT I.DataAcquisto
+         FROM Intonaco I
+         WHERE I.Codice_Lotto = NEW.Lotto_Intonaco)
+		>
+		(SELECT L.DataFine
+		 FROM Lavoro L
+		 WHERE L.Codice_Lavoro = NEW.Lavoro)
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile aggiornare! Lotto comprato dopo la fine del lavoro.';
     END IF;
 END $$
 DELIMITER ;
@@ -4486,7 +4657,7 @@ BEGIN
 			)
 		THEN
 			SIGNAL SQLSTATE '45000'
-			SET MESSAGE_TEXT = 'Impossibile aggiornare! La quantità richiesta è maggiore della quantità stoccata in questo lotto o è nulla.';
+			SET MESSAGE_TEXT = 'Impossibile aggiornare! La quantità richiesta è incorretta.';
 		ELSEIF
 			(NEW.Quantita-OLD.Quantita)
 			<=
@@ -4529,7 +4700,7 @@ BEGIN
         )
     THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! La quantità richiesta è maggiore della quantità stoccata in questo lotto o è nulla.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! La quantità richiesta è incorretta.';
 	ELSEIF
 		NEW.Quantita
         <=
@@ -4542,6 +4713,50 @@ BEGIN
 		UPDATE Mattoni
         SET QuantitaStoccata = QuantitaStoccata - NEW.Quantita
         WHERE Codice_Lotto = NEW.Lotto_Mattoni;
+    END IF;
+END $$
+DELIMITER ;
+
+# Impedisce di inserire un Lotto in Impiego Mattoni se la sua data di compravendita è maggiore rispetto a quella di fine Lavoro
+DROP TRIGGER IF EXISTS ControllaInserimentoDataImpiegoMattoni;
+DELIMITER $$
+CREATE TRIGGER ControllaInserimentoDataImpiegoMattoni
+BEFORE INSERT ON ImpiegoMattoni
+FOR EACH ROW
+BEGIN
+    IF
+		(SELECT M.DataAcquisto
+         FROM Mattoni M
+         WHERE M.Codice_Lotto = NEW.Lotto_Mattoni)
+		>
+		(SELECT IFNULL(L.DataFine, '2000-01-01')
+		 FROM Lavoro L
+		 WHERE L.Codice_Lavoro = NEW.Lavoro)
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Lotto comprato dopo la fine del lavoro.';
+    END IF;
+END $$
+DELIMITER ;
+
+# Impedisce di aggiornare un Lotto in Impiego Mattoni se la sua data di compravendita è maggiore rispetto a quella di fine Lavoro
+DROP TRIGGER IF EXISTS ControllaAggiornamentoDataImpiegoMattoni;
+DELIMITER $$
+CREATE TRIGGER ControllaAggiornamentoDataImpiegoMattoni
+BEFORE UPDATE ON ImpiegoMattoni
+FOR EACH ROW
+BEGIN
+    IF
+		(SELECT M.DataAcquisto
+         FROM Mattoni M
+         WHERE M.Codice_Lotto = NEW.Lotto_Mattoni)
+		>
+		(SELECT L.DataFine
+		 FROM Lavoro L
+		 WHERE L.Codice_Lavoro = NEW.Lavoro)
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile aggiornare! Lotto comprato dopo la fine del lavoro.';
     END IF;
 END $$
 DELIMITER ;
@@ -4568,7 +4783,7 @@ BEGIN
 			)
 		THEN
 			SIGNAL SQLSTATE '45000'
-			SET MESSAGE_TEXT = 'Impossibile aggiornare! La quantità richiesta è maggiore della quantità stoccata in questo lotto o è nulla.';
+			SET MESSAGE_TEXT = 'Impossibile aggiornare! La quantità richiesta è incorretta.';
 		ELSEIF
 			(NEW.Quantita-OLD.Quantita)
 			<=
@@ -4594,88 +4809,6 @@ BEGIN
 END $$
 DELIMITER ;
 
-# Controlla che non venga inserita una quantità maggiore rispetto a quella stoccata nel lotto selezionato nelle Pietre e aggiorna il lotto
-DROP TRIGGER IF EXISTS ControllaInserimentoQuantitaImpiegoPietre;
-DELIMITER $$
-CREATE TRIGGER ControllaInserimentoQuantitaImpiegoPietre
-BEFORE INSERT ON ImpiegoPietre
-FOR EACH ROW
-BEGIN
-	IF
-		NEW.Quantita 
-        >
-        (
-		 SELECT P.QuantitaStoccata
-         FROM Pietre P
-         WHERE P.Codice_Lotto = NEW.Lotto_Pietre
-        )
-    THEN
-		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! La quantità richiesta è maggiore della quantità stoccata in questo lotto o è nulla.';
-	ELSEIF
-		NEW.Quantita
-        <=
-		(
-		 SELECT P.QuantitaStoccata
-         FROM Pietre P
-         WHERE P.Codice_Lotto = NEW.Lotto_Pietre
-        )
-	THEN
-		UPDATE Pietre
-        SET QuantitaStoccata = QuantitaStoccata - NEW.Quantita
-        WHERE Codice_Lotto = NEW.Lotto_Pietre;
-    END IF;
-END $$
-DELIMITER ;
-
-# Controlla che non venga aggiornata una quantità maggiore rispetto a quella stoccata nel lotto selezionato nelle Pietre e aggiorna il lotto
-DROP TRIGGER IF EXISTS ControllaAggiornamentoQuantitaImpiegoPietre;
-DELIMITER $$
-CREATE TRIGGER ControllaAggiornamentoQuantitaImpiegoPietre
-BEFORE UPDATE ON ImpiegoPietre
-FOR EACH ROW
-BEGIN
-	IF
-		NEW.Quantita 
-        >
-		OLD.Quantita
-    THEN
-		IF
-			(NEW.Quantita-OLD.Quantita)
-			>
-			(
-			 SELECT P.QuantitaStoccata
-			 FROM Pietre P
-			 WHERE P.Codice_Lotto = NEW.Lotto_Pietre
-			)
-		THEN
-			SIGNAL SQLSTATE '45000'
-			SET MESSAGE_TEXT = 'Impossibile aggiornare! La quantità richiesta è maggiore della quantità stoccata in questo lotto o è nulla.';
-		ELSEIF
-			(NEW.Quantita-OLD.Quantita)
-			<=
-			(
-			 SELECT P.QuantitaStoccata
-			 FROM Pietre P
-			 WHERE P.Codice_Lotto = NEW.Lotto_Pietre
-			)
-		THEN
-			UPDATE Pietre
-			SET QuantitaStoccata = QuantitaStoccata - (NEW.Quantita-OLD.Quantita)
-			WHERE Codice_Lotto = NEW.Lotto_Pietre;
-        END IF;
-	ELSEIF
-		NEW.Quantita
-        <
-		OLD.Quantita
-	THEN
-		UPDATE Pietre
-        SET QuantitaStoccata = QuantitaStoccata + (OLD.Quantita-NEW.Quantita)
-        WHERE Codice_Lotto = NEW.Lotto_Pietre;
-    END IF;
-END $$
-DELIMITER ;
-
 # Controlla che non venga inserita una quantità maggiore rispetto a quella stoccata nel lotto selezionato nelle Piastrelle e aggiorna il lotto
 DROP TRIGGER IF EXISTS ControllaInserimentoQuantitaImpiegoPiastrelle;
 DELIMITER $$
@@ -4693,7 +4826,7 @@ BEGIN
         )
     THEN
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Impossibile inserire! La quantità richiesta è maggiore della quantità stoccata in questo lotto o è nulla.';
+        SET MESSAGE_TEXT = 'Impossibile inserire! La quantità richiesta è incorretta.';
 	ELSEIF
 		NEW.Quantita
         <=
@@ -4706,6 +4839,50 @@ BEGIN
 		UPDATE Piastrelle
         SET QuantitaStoccata = QuantitaStoccata - NEW.Quantita
         WHERE Codice_Lotto = NEW.Lotto_Piastrelle;
+    END IF;
+END $$
+DELIMITER ;
+
+# Impedisce di inserire un Lotto in Impiego Piastrelle se la sua data di compravendita è maggiore rispetto a quella di fine Lavoro
+DROP TRIGGER IF EXISTS ControllaInserimentoDataImpiegoPiastrelle;
+DELIMITER $$
+CREATE TRIGGER ControllaInserimentoDataImpiegoPiastrelle
+BEFORE INSERT ON ImpiegoPiastrelle
+FOR EACH ROW
+BEGIN
+    IF
+		(SELECT P.DataAcquisto
+         FROM Piastrelle P
+         WHERE P.Codice_Lotto = NEW.Lotto_Piastrelle)
+		>
+		(SELECT IFNULL(L.DataFine, '2000-01-01')
+		 FROM Lavoro L
+		 WHERE L.Codice_Lavoro = NEW.Lavoro)
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Lotto comprato dopo la fine del lavoro.';
+    END IF;
+END $$
+DELIMITER ;
+
+# Impedisce di aggiornare un Lotto in Impiego Piastrelle se la sua data di compravendita è maggiore rispetto a quella di fine Lavoro
+DROP TRIGGER IF EXISTS ControllaAggiornamentoDataImpiegoPiastrelle;
+DELIMITER $$
+CREATE TRIGGER ControllaAggiornamentoDataImpiegoPiastrelle
+BEFORE UPDATE ON ImpiegoPiastrelle
+FOR EACH ROW
+BEGIN
+    IF
+		(SELECT P.DataAcquisto
+         FROM Piastrelle P
+         WHERE P.Codice_Lotto = NEW.Lotto_Piastrelle)
+		>
+		(SELECT L.DataFine
+		 FROM Lavoro L
+		 WHERE L.Codice_Lavoro = NEW.Lavoro)
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile aggiornare! Lotto comprato dopo la fine del lavoro.';
     END IF;
 END $$
 DELIMITER ;
@@ -4732,7 +4909,7 @@ BEGIN
 			)
 		THEN
 			SIGNAL SQLSTATE '45000'
-			SET MESSAGE_TEXT = 'Impossibile aggiornare! La quantità richiesta è maggiore della quantità stoccata in questo lotto o è nulla.';
+			SET MESSAGE_TEXT = 'Impossibile aggiornare! La quantità richiesta è incorretta.';
 		ELSEIF
 			(NEW.Quantita-OLD.Quantita)
 			<=
@@ -4758,6 +4935,132 @@ BEGIN
 END $$
 DELIMITER ;
 
+# Controlla che non venga inserita una quantità maggiore rispetto a quella stoccata nel lotto selezionato nelle Pietre e aggiorna il lotto
+DROP TRIGGER IF EXISTS ControllaInserimentoQuantitaImpiegoPietre;
+DELIMITER $$
+CREATE TRIGGER ControllaInserimentoQuantitaImpiegoPietre
+BEFORE INSERT ON ImpiegoPietre
+FOR EACH ROW
+BEGIN
+	IF
+		NEW.Quantita 
+        >
+        (
+		 SELECT P.QuantitaStoccata
+         FROM Pietre P
+         WHERE P.Codice_Lotto = NEW.Lotto_Pietre
+        )
+    THEN
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Impossibile inserire! La quantità richiesta è incorretta.';
+	ELSEIF
+		NEW.Quantita
+        <=
+		(
+		 SELECT P.QuantitaStoccata
+         FROM Pietre P
+         WHERE P.Codice_Lotto = NEW.Lotto_Pietre
+        )
+	THEN
+		UPDATE Pietre
+        SET QuantitaStoccata = QuantitaStoccata - NEW.Quantita
+        WHERE Codice_Lotto = NEW.Lotto_Pietre;
+    END IF;
+END $$
+DELIMITER ;
+
+# Impedisce di inserire un Lotto in Impiego Pietre se la sua data di compravendita è maggiore rispetto a quella di fine Lavoro
+DROP TRIGGER IF EXISTS ControllaInserimentoDataImpiegoPietre;
+DELIMITER $$
+CREATE TRIGGER ControllaInserimentoDataImpiegoPietre
+BEFORE INSERT ON ImpiegoPietre
+FOR EACH ROW
+BEGIN
+    IF
+		(SELECT P.DataAcquisto
+         FROM Pietre P
+         WHERE P.Codice_Lotto = NEW.Lotto_Pietre)
+		>
+		(SELECT IFNULL(L.DataFine, '2000-01-01')
+		 FROM Lavoro L
+		 WHERE L.Codice_Lavoro = NEW.Lavoro)
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Lotto comprato dopo la fine del lavoro.';
+    END IF;
+END $$
+DELIMITER ;
+
+# Impedisce di aggiornare un Lotto in Impiego Pietre se la sua data di compravendita è maggiore rispetto a quella di fine Lavoro
+DROP TRIGGER IF EXISTS ControllaAggiornamentoDataImpiegoPietre;
+DELIMITER $$
+CREATE TRIGGER ControllaAggiornamentoDataImpiegoPietre
+BEFORE UPDATE ON ImpiegoPietre
+FOR EACH ROW
+BEGIN
+    IF
+		(SELECT P.DataAcquisto
+         FROM Pietre P
+         WHERE P.Codice_Lotto = NEW.Lotto_Pietre)
+		>
+		(SELECT L.DataFine
+		 FROM Lavoro L
+		 WHERE L.Codice_Lavoro = NEW.Lavoro)
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile aggiornare! Lotto comprato dopo la fine del lavoro.';
+    END IF;
+END $$
+DELIMITER ;
+
+# Controlla che non venga aggiornata una quantità maggiore rispetto a quella stoccata nel lotto selezionato nelle Pietre e aggiorna il lotto
+DROP TRIGGER IF EXISTS ControllaAggiornamentoQuantitaImpiegoPietre;
+DELIMITER $$
+CREATE TRIGGER ControllaAggiornamentoQuantitaImpiegoPietre
+BEFORE UPDATE ON ImpiegoPietre
+FOR EACH ROW
+BEGIN
+	IF
+		NEW.Quantita 
+        >
+		OLD.Quantita
+    THEN
+		IF
+			(NEW.Quantita-OLD.Quantita)
+			>
+			(
+			 SELECT P.QuantitaStoccata
+			 FROM Pietre P
+			 WHERE P.Codice_Lotto = NEW.Lotto_Pietre
+			)
+		THEN
+			SIGNAL SQLSTATE '45000'
+			SET MESSAGE_TEXT = 'Impossibile aggiornare! La quantità richiesta è incorretta.';
+		ELSEIF
+			(NEW.Quantita-OLD.Quantita)
+			<=
+			(
+			 SELECT P.QuantitaStoccata
+			 FROM Pietre P
+			 WHERE P.Codice_Lotto = NEW.Lotto_Pietre
+			)
+		THEN
+			UPDATE Pietre
+			SET QuantitaStoccata = QuantitaStoccata - (NEW.Quantita-OLD.Quantita)
+			WHERE Codice_Lotto = NEW.Lotto_Pietre;
+        END IF;
+	ELSEIF
+		NEW.Quantita
+        <
+		OLD.Quantita
+	THEN
+		UPDATE Pietre
+        SET QuantitaStoccata = QuantitaStoccata + (OLD.Quantita-NEW.Quantita)
+        WHERE Codice_Lotto = NEW.Lotto_Pietre;
+    END IF;
+END $$
+DELIMITER ;
+
 # Controlla l'inserimento dei Sensori
 DROP TRIGGER IF EXISTS ControllaInserimentoSensore;
 DELIMITER $$
@@ -4766,15 +5069,11 @@ BEFORE INSERT ON Sensore
 FOR EACH ROW
 BEGIN
 	IF
-		NEW.Categoria <> 'Accelerometro'
-        AND
         NEW.Categoria <> 'Accelerometro X'
         AND
         NEW.Categoria <> 'Accelerometro Y'
         AND
         NEW.Categoria <> 'Accelerometro Z'
-        AND
-        NEW.Categoria <> 'Giroscopio'
         AND
         NEW.Categoria <> 'Giroscopio X'
         AND
@@ -4782,13 +5081,9 @@ BEGIN
         AND
         NEW.Categoria <> 'Giroscopio Z'
         AND
-        NEW.Categoria <> 'Termostato Esterno'
-        AND
         NEW.Categoria <> 'Termostato Esterno Caldo'
         AND
         NEW.Categoria <> 'Termostato Esterno Freddo'
-        AND
-        NEW.Categoria <> 'Termostato Interno'
         AND
         NEW.Categoria <> 'Termostato Interno Caldo'
         AND
@@ -4807,80 +5102,106 @@ BEGIN
     END IF;   
     
 	IF
-		NEW.Categoria = 'Accelerometro' OR NEW.Categoria = 'Accelerometro X' OR NEW.Categoria = 'Accelerometro Y' OR NEW.Categoria = 'Accelerometro Z'
+		NEW.Categoria = 'Accelerometro X' OR NEW.Categoria = 'Accelerometro Y' OR NEW.Categoria = 'Accelerometro Z'
 		OR
-		NEW.Categoria = 'Giroscopio' OR NEW.Categoria = 'Giroscopio X' OR NEW.Categoria = 'Giroscopio Y' OR NEW.Categoria = 'Giroscopio Z'
+		NEW.Categoria = 'Giroscopio X' OR NEW.Categoria = 'Giroscopio Y' OR NEW.Categoria = 'Giroscopio Z'
 		OR
-		NEW.Categoria = 'Termostato Esterno' OR NEW.Categoria = 'Termostato Esterno Caldo' OR NEW.Categoria = 'Termostato Esterno Freddo'
+		NEW.Categoria = 'Termostato Esterno Caldo' OR NEW.Categoria = 'Termostato Esterno Freddo'
+        OR
+		NEW.Categoria = 'Igrometro Esterno'
+		OR
+		NEW.Categoria = 'Pluviometro'
 	THEN
 		IF
 			NOT EXISTS (SELECT M.Esterno
-			 	    FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice
-				       	      INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice
-				     	      INNER JOIN PosizionamentoVano PV1 ON M.V1 = PV1.Vertice
-				     	      INNER JOIN PosizionamentoVano PV2 ON M.V2 = PV2.Vertice
-			 	    WHERE M.Esterno = TRUE
-			     	         AND
+						FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice AND M.Pianta = V1.Pianta
+								    INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice AND M.Pianta = V2.Pianta
+								    INNER JOIN PosizionamentoVano PV1 ON M.V1 = PV1.Vertice 
+								    INNER JOIN PosizionamentoVano PV2 ON M.V2 = PV2.Vertice
+						WHERE M.Esterno = TRUE
+							 AND
 							  PV1.Vano = PV2.Vano
-			      	         AND 
-			       	          PV1.Vano = NEW.Vano)
+							 AND 
+							  PV1.Vano = NEW.Vano)
 		THEN 
 			SIGNAL SQLSTATE '45000'
-			SET MESSAGE_TEXT = 'Impossibile inserire! Il Vano non possiede Mura verso la parte esterna dello edificio per Sensori che devono stare nella parte esterna!';
+			SET MESSAGE_TEXT = 'Impossibile inserire! Il Vano non possiede Mura verso la parte esterna!';
 		END IF;
 	END IF;
-END $$
-DELIMITER ;
-
-# Se la Categoria è Accelerometro, Giroscopio, Termostato Interno e Termostato Esterno aggiunge in automatico le varie informazioni
-DROP TRIGGER IF EXISTS ControllaInserimentoSensoreSpeciale;
-DELIMITER $$
-CREATE TRIGGER ControllaInserimentoSensoreSpeciale
-AFTER INSERT ON Sensore
-FOR EACH ROW
-BEGIN
-	IF
-		NEW.Categoria = 'Accelerometro'
+    
+	IF	
+		(NEW.Categoria = 'Accelerometro X'
+         OR
+         NEW.Categoria = 'Accelerometro Y'
+         OR
+         NEW.Categoria = 'Accelerometro Z')
+        AND
+        NEW.UnitaMisura <> 'Km'
+		AND
+		NEW.UnitaMisura <> 'm'
 	THEN
-		UPDATE Sensore
-		SET Categoria = 'Accelerometro X'
-		WHERE Codice_Seriale = NEW.Codice_Seriale;
-		
-		INSERT INTO Sensore(Codice_Seriale, Categoria, UnitaMisura, Alert, Vano)
-		VALUES (NEW.Codice_Seriale, 'Accelerometro Y', NEW.UnitaMisura, NEW.Alert, NEW.Vano), 
-			   (NEW.Codice_Seriale, 'Accelerometro Z', NEW.UnitaMisura, NEW.Alert, NEW.Vano);
-
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. Km o m.';
 	ELSEIF
-		NEW.Categoria = 'Giroscopio'
-	THEN
-		UPDATE Sensore
-		SET Categoria = 'Giroscopio X'
-		WHERE Codice_Seriale = NEW.Codice_Seriale;
-		
-		INSERT INTO Sensore(Codice_Seriale, Categoria, UnitaMisura, Alert,Vano)
-		VALUES (NEW.Codice_Seriale, 'Giroscopio Y', NEW.UnitaMisura, NEW.Alert, NEW.Vano), 
-			   (NEW.Codice_Seriale, 'Giroscopio Z', NEW.UnitaMisura, NEW.Alert, NEW.Vano);
-
+		(NEW.Categoria = 'Giroscopio X'
+         OR
+         NEW.Categoria = 'Giroscopio Y'
+         OR
+         NEW.Categoria = 'Giroscopio Z')
+        AND
+        NEW.UnitaMisura <> '°/s'
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. °/s.';
 	ELSEIF
-		NEW.Categoria = 'Termostato Interno'
-	THEN
-		UPDATE Sensore
-		SET Categoria = 'Termostato Interno Caldo'
-		WHERE Codice_Seriale = NEW.Codice_Seriale;
-		
-		INSERT INTO Sensore(Codice_Seriale, Categoria, UnitaMisura, Alert,Vano)
-		VALUES (NEW.Codice_Seriale, 'Termostato Interno Freddo', NEW.UnitaMisura, (NEW.Alert * (-1) / 2), NEW.Vano);
-
+		(NEW.Categoria = 'Termostato Esterno Caldo'
+         OR
+         NEW.Categoria = 'Termostato Esterno Freddo'
+         OR
+         NEW.Categoria = 'Termostato Esterno Freddo'
+         OR
+         NEW.Categoria = 'Termostato Interno Freddo')
+        AND
+        NEW.UnitaMisura <> '°C'
+        AND
+		NEW.UnitaMisura <> '°K'
+        AND
+		NEW.UnitaMisura <> '°F'
+        AND
+		NEW.UnitaMisura <> '°Re'
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. °C, °K, °F o °Re.';
 	ELSEIF
-		NEW.Categoria = 'Termostato Esterno'
-	THEN
-		UPDATE Sensore
-		SET Categoria = 'Termostato Esterno Caldo'
-		WHERE Codice_Seriale = NEW.Codice_Seriale;
-		
-		INSERT INTO Sensore(Codice_Seriale, Categoria, UnitaMisura, Alert,Vano)
-		VALUES (NEW.Codice_Seriale, 'Termostato Esterno Freddo', NEW.UnitaMisura, (NEW.Alert * (-1) / 2), NEW.Vano);
-	END IF;
+		(NEW.Categoria = 'Igrometro Interno'
+         OR
+         NEW.Categoria = 'Igrometro Esterno')
+        AND
+        NEW.UnitaMisura <> 'kg/m³'
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. kg/m³.';
+	ELSEIF
+		NEW.Categoria = 'Pluviometro'
+        AND
+        NEW.UnitaMisura <> 'mm'
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. mm.';
+	ELSEIF
+		NEW.Categoria = 'Posizione'
+        AND
+        NEW.UnitaMisura <> 'mm'
+        AND 
+		NEW.UnitaMisura <> 'cm'
+        AND
+        NEW.UnitaMisura <> 'dm'
+        AND
+        NEW.UnitaMisura <> 'm'
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. m, dm, cm, o mm.';
+    END IF;
 END $$
 DELIMITER ;
 
@@ -4933,24 +5254,102 @@ BEGIN
 			NEW.Categoria = 'Giroscopio' OR NEW.Categoria = 'Giroscopio X' OR NEW.Categoria = 'Giroscopio Y' OR NEW.Categoria = 'Giroscopio Z'
 			OR
 			NEW.Categoria = 'Termostato Esterno' OR NEW.Categoria = 'Termostato Esterno Caldo' OR NEW.Categoria = 'Termostato Esterno Freddo'
+            OR
+			NEW.Categoria = 'Igrometro Esterno'
+			OR
+			NEW.Categoria = 'Pluviometro'
 		THEN
 			IF
 				NOT EXISTS (SELECT M.Esterno
-			 	    	FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice
-				       	      	INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice
-				     	      	INNER JOIN PosizionamentoVano PV1 ON M.V1 = PV1.Vertice
-				     	      	INNER JOIN PosizionamentoVano PV2 ON M.V2 = PV2.Vertice
-			 	    	WHERE M.Esterno = TRUE
-			     	         	AND
-						 PV1.Vano = PV2.Vano
-			      	         	AND 
-			       	          	 PV1.Vano = NEW.Vano)
+							FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice
+									INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice
+									INNER JOIN PosizionamentoVano PV1 ON M.V1 = PV1.Vertice
+									INNER JOIN PosizionamentoVano PV2 ON M.V2 = PV2.Vertice
+							WHERE M.Esterno = TRUE
+			     	         	 AND
+								  PV1.Vano = PV2.Vano
+			      	         	 AND 
+			       	          	  PV1.Vano = NEW.Vano)
 			THEN 
 				SIGNAL SQLSTATE '45000'
-				SET MESSAGE_TEXT = 'Impossibile aggiornare! Il Vano non possiede Mura verso la parte esterna dello edificio per Sensori che devono stare nella parte esterna!';
+				SET MESSAGE_TEXT = 'Impossibile aggiornare! Il Vano non possiede Mura verso la parte esterna!';
 			END IF;
 		END IF;
 	END IF;
+    
+		IF	
+		(NEW.Categoria = 'Accelerometro X'
+         OR
+         NEW.Categoria = 'Accelerometro Y'
+         OR
+         NEW.Categoria = 'Accelerometro Z')
+        AND
+        NEW.UnitaMisura <> 'Km'
+		AND
+		NEW.UnitaMisura <> 'm'
+	THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. Km o m.';
+	ELSEIF
+		(NEW.Categoria = 'Giroscopio X'
+         OR
+         NEW.Categoria = 'Giroscopio Y'
+         OR
+         NEW.Categoria = 'Giroscopio Z')
+        AND
+        NEW.UnitaMisura <> '°/s'
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. °/s.';
+	ELSEIF
+		(NEW.Categoria = 'Termostato Esterno Caldo'
+         OR
+         NEW.Categoria = 'Termostato Esterno Freddo'
+         OR
+         NEW.Categoria = 'Termostato Esterno Freddo'
+         OR
+         NEW.Categoria = 'Termostato Interno Freddo')
+        AND
+        NEW.UnitaMisura <> '°C'
+        AND
+		NEW.UnitaMisura <> '°K'
+        AND
+		NEW.UnitaMisura <> '°F'
+        AND
+		NEW.UnitaMisura <> '°Re'
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. °C, °K, °F o °Re.';
+	ELSEIF
+		(NEW.Categoria = 'Igrometro Interno'
+         OR
+         NEW.Categoria = 'Igrometro Esterno')
+        AND
+        NEW.UnitaMisura <> 'kg/m³'
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. kg/m³.';
+	ELSEIF
+		NEW.Categoria = 'Pluviometro'
+        AND
+        NEW.UnitaMisura <> 'mm'
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. mm.';
+	ELSEIF
+		NEW.Categoria = 'Posizione'
+        AND
+        NEW.UnitaMisura <> 'mm'
+        AND 
+		NEW.UnitaMisura <> 'cm'
+        AND
+        NEW.UnitaMisura <> 'dm'
+        AND
+        NEW.UnitaMisura <> 'm'
+    THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. m, dm, cm, o mm.';
+    END IF;
 END $$
 DELIMITER ;
 
@@ -4977,6 +5376,10 @@ BEGIN
     
     IF 
 		NEW.ValoreRegistrato > allerta
+        AND 
+        NEW.TipoSensore <> 'Termostato Interno Freddo'
+        AND 
+        NEW.TipoSensore <> 'Termostato Esterno Freddo'
     THEN
         SET tipo_sensore =
 		(
@@ -5044,35 +5447,7 @@ BEGIN
 						   OR
 						   P.Pericolo = 'Eruzione Vulcanica')
 				);
-
-		ELSEIF
-			tipo_sensore = 'Termostato Interno Freddo' 
-		THEN
-			SET k = 2;
-			SET coeff_tmp =
-				(
-					SELECT SUM(P.CoefficienteRischio)
-					FROM AreaGeografica A INNER JOIN Edificio E ON A.ID_Area = E.Locazione INNER JOIN Sensore S ON E.ID = S.Edificio
-										  INNER JOIN PericolositaGeografica P ON A.ID_Area = P.Area
-					WHERE S.ID_Sensore = NEW.ID_Sensore AND S.Categoria = NEW.TipoSensore
-						 AND
-						   P.Pericolo = 'Gelo'
-				);
-
-        ELSEIF
-            tipo_sensore = 'Termostato Esterno Freddo'
-		THEN
-			SET k = 2;
-			SET coeff_tmp =
-				(
-					SELECT SUM(P.CoefficienteRischio)
-					FROM AreaGeografica A INNER JOIN Edificio E ON A.ID_Area = E.Locazione INNER JOIN Sensore S ON E.ID = S.Edificio
-										  INNER JOIN PericolositaGeografica P ON A.ID_Area = P.Area
-					WHERE S.ID_Sensore = NEW.ID_Sensore AND S.Categoria = NEW.TipoSensore
-						 AND
-                          P.Pericolo = 'Ondata di Freddo'
-				);
-
+                
 		ELSEIF
 			tipo_sensore = 'Pluviometro'
         THEN
@@ -5145,6 +5520,85 @@ BEGIN
 			SET Stato = 4
 			WHERE ID = edificio;
 		END IF;
+	ELSEIF
+		NEW.ValoreRegistrato < allerta
+        AND
+        (NEW.TipoSensore = 'Termostato Interno Freddo'
+         OR 
+         NEW.TipoSensore = 'Termostato Esterno Freddo')
+    THEN
+		IF
+            tipo_sensore = 'Termostato Esterno Freddo'
+		THEN
+			SET k = 2;
+			SET coeff_tmp =
+				(
+					SELECT SUM(P.CoefficienteRischio)
+					FROM AreaGeografica A INNER JOIN Edificio E ON A.ID_Area = E.Locazione INNER JOIN Sensore S ON E.ID = S.Edificio
+										  INNER JOIN PericolositaGeografica P ON A.ID_Area = P.Area
+					WHERE S.ID_Sensore = NEW.ID_Sensore AND S.Categoria = NEW.TipoSensore
+						 AND
+                          P.Pericolo = 'Ondata di Freddo'
+				);
+                
+		ELSEIF
+			tipo_sensore = 'Termostato Interno Freddo' 
+		THEN
+			SET k = 2;
+			SET coeff_tmp =
+				(
+					SELECT SUM(P.CoefficienteRischio)
+					FROM AreaGeografica A INNER JOIN Edificio E ON A.ID_Area = E.Locazione INNER JOIN Sensore S ON E.ID = S.Edificio
+										  INNER JOIN PericolositaGeografica P ON A.ID_Area = P.Area
+					WHERE S.ID_Sensore = NEW.ID_Sensore AND S.Categoria = NEW.TipoSensore
+						 AND
+						   P.Pericolo = 'Gelo'
+				);
+		END IF;
+    END IF;
+END $$
+DELIMITER ;
+
+# Controlla che i Valori Registrati inseriti siano consoni al Sensore
+DROP TRIGGER IF EXISTS ControllaInserimentoRegistrazione;
+DELIMITER $$
+CREATE TRIGGER ControllaInserimentoRegistrazione
+BEFORE INSERT ON Registrazione
+FOR EACH ROW
+BEGIN
+	IF
+		(NEW.TipoSensore = 'Pluviometro'
+         OR
+         NEW.TipoSensore = 'Igrometro Esterno'
+         OR
+         NEW.TipoSensore = 'Igrometro Interno')
+        AND
+        NEW.ValoreRegistrato < 0
+	THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile inserire! Il Valore Registrato non può essere negativo in questo caso!';
+    END IF;
+END $$
+DELIMITER ;
+
+# Controlla che i Valori Registrati aggiornati siano consoni al Sensore
+DROP TRIGGER IF EXISTS ControllaAggiornamentoRegistrazione;
+DELIMITER $$
+CREATE TRIGGER ControllaAggiornamentoRegistrazione
+BEFORE UPDATE ON Registrazione
+FOR EACH ROW
+BEGIN
+	IF
+		(NEW.TipoSensore = 'Pluviometro'
+         OR
+         NEW.TipoSensore = 'Igrometro Esterno'
+         OR
+         NEW.TipoSensore = 'Igrometro Interno')
+        AND
+        NEW.ValoreRegistrato < 0
+	THEN
+		SIGNAL SQLSTATE '45000'
+		SET MESSAGE_TEXT = 'Impossibile aggiornare! Il Valore Registrato non può essere negativo in questo caso!';
     END IF;
 END $$
 DELIMITER ;
@@ -5160,7 +5614,7 @@ BEGIN
 		NEW.TipoSensore <> 'Posizione'
 	THEN
 		SIGNAL SQLSTATE '45000'
-		SET MESSAGE_TEXT = 'Impossibile inserire! La categoria non è quella valida! Deve essere un Sensore di Posizione';
+		SET MESSAGE_TEXT = 'Impossibile inserire! Deve essere un Sensore di Posizione!';
     END IF;
 END $$
 DELIMITER ;
@@ -5176,7 +5630,7 @@ BEGIN
 		NEW.TipoSensore <> 'Posizione'
 	THEN
 		SIGNAL SQLSTATE '45000'
-		SET MESSAGE_TEXT = 'Impossibile aggiornare! La categoria non è quella valida! Deve essere un Sensore di Posizione';
+		SET MESSAGE_TEXT = 'Impossibile aggiornare! Deve essere un Sensore di Posizione!';
     END IF;
 END $$
 DELIMITER ;
@@ -5587,7 +6041,9 @@ BEGIN
                         INNER JOIN Registrazione R ON (R.ID_Sensore = S.ID AND R.Tipo_Sensore = S.Categoria)
 		WHERE E.ID = Edificio 
 			 AND
-              R.ValoreRegistrato > S.Alert 
+              ((R.ValoreRegistrato > S.Alert AND R.TipoSensore <> 'Termostato Interno Freddo' AND R.TipoSensore <> 'Termostato Esterno Freddo')
+			   OR
+               (R.ValoreRegistrato < S.Alert AND (R.TipoSensore = 'Termostato Interno Freddo' OR R.TipoSensore = 'Termostato Esterno Freddo')))
 			 AND 
               NOT EXISTS (
 							SELECT *
@@ -5658,7 +6114,9 @@ BEGIN
 							INNER JOIN Registrazione R ON (R.ID_Sensore = S.ID AND R.Tipo_Sensore = S.Categoria)
 			WHERE E.ID = Edificio 
 				 AND
-				  R.ValoreRegistrato > S.Alert 
+				  ((R.ValoreRegistrato > S.Alert AND R.TipoSensore <> 'Termostato Interno Freddo' AND R.TipoSensore <> 'Termostato Esterno Freddo')
+				 OR
+				  (R.ValoreRegistrato < S.Alert AND (R.TipoSensore = 'Termostato Interno Freddo' OR R.TipoSensore = 'Termostato Esterno Freddo')))
 				 AND 
 				  NOT EXISTS (
 								SELECT *
@@ -5965,7 +6423,11 @@ BEGIN
     
     SET percentuale = indice * _Intensità * coefficiente / _Epicentro ;
     
-    IF percentuale > 1 THEN SET percentuale = 1;  END IF ;
+    IF 
+		percentuale > 1 
+    THEN 
+		SET percentuale = 1;  
+    END IF;
     
     RETURN percentuale ;
 END $$
@@ -6327,17 +6789,14 @@ VALUES ('Camera', 4, 2.8, 001),
 	   ('Bagno', 4, 2.8, 001),
        ('Salotto', 4, 3, 001),
        ('Garage', 4, 2.8, 001),
-       ('Garage', 7, 2.8, 001),
-       ('Entrata', 6, 3, 002),
+       ('Corridoio', 6, 2.8, 001),
+       ('Entrata', 10, 3, 002),
        ('Ascensore', 4, 3, 002),
        ('Cucina', 4, 3, 002),
        ('Bagno', 4, 3, 002),
        ('Camera', 4, 3, 002),
        ('Corridoio', 12, 3, 003),
        ('Ascensore', 4, 3, 003),
-       ('Bagno', 4, 3, 003),
-       ('Cucina', 4, 3, 003),
-       ('Camera', 4, 3, 003),
        ('Bagno', 4, 3, 003),
        ('Cucina', 4, 3, 003),
        ('Camera', 4, 3, 003),
@@ -6382,9 +6841,6 @@ VALUES ('Camera', 4, 2.8, 001),
        ('Bagno', 4, 3, 004),
        ('Cucina', 4, 3, 004),
        ('Camera', 4, 3, 004),
-       ('Bagno', 4, 3, 004),
-       ('Cucina', 4, 3, 004),
-       ('Camera', 4, 3, 004),
        ('Corridoio', 12, 3, 005),
        ('Ascensore', 4, 3, 005),
        ('Bagno', 4, 3, 005),
@@ -6408,13 +6864,10 @@ VALUES ('Camera', 4, 2.8, 001),
        ('Bagno', 4, 3, 005),
        ('Cucina', 4, 3, 005),
        ('Camera', 4, 3, 005),
-       ('Bagno', 4, 3, 005),
-       ('Cucina', 4, 3, 005),
-       ('Camera', 4, 3, 005),
        ('Corridoio', 12, 2.8, 006),
-       ('Cucina', 4, 2.8, 006),
+       ('Cucina', 6, 2.8, 006),
        ('Sala da Pranzo', 4, 2.8, 006),
-       ('Salotto', 4, 2.8, 006),
+       ('Salotto', 6, 2.8, 006),
        ('Salotto', 4, 2.8, 006),
        ('Corridoio', 4, 2.8, 007),
        ('Camera', 4, 2.8, 007),
@@ -6423,9 +6876,9 @@ VALUES ('Camera', 4, 2.8, 001),
        ('Camera', 4, 2.8, 007),
        ('Sgabuzzino', 4, 2.8, 007),
        ('Corridoio', 12, 2.8, 008),
-       ('Cucina', 4, 2.8, 008),
+       ('Cucina', 6, 2.8, 008),
        ('Camera', 4, 2.8, 008),
-       ('Salotto', 4, 2.8, 008),
+       ('Salotto', 6, 2.8, 008),
        ('Salotto', 4, 2.8, 008),
        ('Corridoio', 4, 2.8, 009),
        ('Camera', 4, 2.8, 009),
@@ -6440,29 +6893,1059 @@ VALUES ('Camera', 4, 2.8, 001),
        ('Salotto', 4, 2.7, 011);
 
 INSERT INTO Vertice(Numero_Vertice, Pianta, X, Y)
-VALUES (1, 001, 0, 0),
+VALUES # Pianta 001
+	   (1, 001, 0, 0),
 	   (2, 001, 10, 0),
        (3, 001, 10, 15),
        (4, 001, 6, 14),
        (5, 001, 6, 18),
-       (6, 001, 0, 18);/*
+       (6, 001, 0, 18),
        (7, 001, 0, 0),
        (8, 001, 4, 0),
        (9, 001, 4, 6),
-       (10, 001, 0, 6);
+       (10, 001, 0, 6),
+       (11, 001, 0, 6),
+       (12, 001, 4, 6),
+       (13, 001, 4, 12),
+       (14, 001, 0, 12),
+       (15, 001, 6, 0),
+       (16, 001, 10, 0),
+       (17, 001, 10, 6),
+       (18, 001, 6, 6),
+       (19, 001, 6, 6),
+       (20, 001, 10, 6),
+       (21, 001, 10, 10),
+       (22, 001, 6, 10),
+       (23, 001, 0, 12),
+       (24, 001, 6, 12),
+       (25, 001, 6, 18),
+       (26, 001, 0, 18),
+       (27, 001, 6, 12),
+       (28, 001, 10, 12),
+       (29, 001, 10, 15),
+       (30, 001, 6, 15),
+       (31, 001, 4, 0),
+       (32, 001, 6, 0),
+       (33, 001, 6, 10),
+       (34, 001, 10, 10),
+       (35, 001, 10, 12),
+       (36, 001, 4, 12),
+       # Pianta 002
+       (1, 002, 0, 0),
+       (2, 002, 10, 0),
+       (3, 002, 10, 10),
+       (4, 002, 0, 10),
+       (5, 002, 0, 0),
+       (6, 002, 7, 0),
+       (7, 002, 7, 6),
+       (8, 002, 10, 6),
+       (9, 002, 10, 10),
+       (10, 002, 6, 10),
+       (11, 002, 6, 8),
+       (12, 002, 4, 8),
+       (13, 002, 4, 10),
+       (14, 002, 0, 10),
+       (15, 002, 6, 10),
+       (16, 002, 6, 8),
+       (17, 002, 4, 8),
+       (18, 002, 4, 10),
+       (19, 002, 7, 0),
+       (20, 002, 10, 0),
+       (21, 002, 10, 4),
+       (22, 002, 7, 4),
+       (23, 002, 7, 4),
+       (24, 002, 8, 4),
+       (25, 002, 8, 6),
+       (26, 002, 7, 6),
+       (27, 002, 8, 4),
+       (28, 002, 10, 4),
+	   (29, 002, 10, 6),
+       (30, 002, 8, 6),
+       # Pianta 003
+       (1, 003, 0, 0),
+       (2, 003, 10, 0),
+       (3, 003, 10, 10),
+       (4, 003, 0, 10),
+       (5, 003, 2, 2),
+       (6, 003, 8, 2),
+       (7, 003, 8, 8),
+       (8, 003, 7, 8),
+       (9, 003, 7, 10),
+       (10, 003, 6, 10),
+       (11, 003, 6, 8),
+       (12, 003, 4, 8),
+       (13, 003, 4, 10),
+	   (14, 003, 3, 10),
+       (15, 003, 3, 8),
+       (16, 003, 2, 8),
+       (17, 003, 4, 8),
+       (18, 003, 6, 8),
+       (19, 003, 6, 10),
+       (20, 003, 4, 10),
+       (21, 003, 0, 0),
+       (22, 003, 1, 0),
+       (23, 003, 1, 1),
+       (24, 003, 0, 1),
+       (25, 003, 1, 0),
+       (26, 003, 3, 0),
+       (27, 003, 3, 2),
+       (28, 003, 1, 2),
+       (29, 003, 0, 2),
+       (30, 003, 2, 2),
+       (31, 003, 2, 3),
+       (32, 003, 0, 3),
+       (33, 003, 3, 0),
+       (34, 003, 5, 0),
+       (35, 003, 5, 1),
+       (36, 003, 3, 1),
+       (37, 003, 3, 1),
+       (38, 003, 7, 1),
+       (39, 003, 7, 2),
+       (40, 003, 3, 2),
+       (41, 003, 5, 0),
+       (42, 003, 7, 0),
+       (43, 003, 7, 1),
+       (44, 003, 5, 1),
+       (45, 003, 9, 0),
+       (46, 003, 10, 0),
+       (47, 003, 10, 2),
+       (48, 003, 9, 2),
+       (49, 003, 7, 0),
+       (50, 003, 9, 0),
+       (51, 003, 9, 2),
+       (52, 003, 7, 2),
+       (53, 003, 8, 2),
+       (54, 003, 10, 2),
+       (55, 003, 10, 3),
+       (56, 003, 8, 3),
+       (57, 003, 9, 5),
+       (58, 003, 10, 5),
+       (59, 003, 10, 7),
+       (60, 003, 9, 7),
+       (61, 003, 8, 3),
+       (62, 003, 9, 3),
+       (63, 003, 9, 7),
+       (64, 003, 8, 7),
+       (65, 003, 9, 3),
+       (66, 003, 10, 3),
+       (67, 003, 10, 5),
+       (68, 003, 9, 5),
+       (69, 003, 9, 8),
+       (70, 003, 10, 8),
+       (71, 003, 10, 10),
+       (72, 003, 9, 10),
+       (73, 003, 7, 8),
+       (74, 003, 9, 8),
+       (75, 003, 9, 10),
+       (76, 003, 7, 10),
+       (77, 003, 8, 7),
+       (78, 003, 10, 7),
+       (79, 003, 10, 8),
+       (80, 003, 8, 8),
+       (81, 003, 3, 8),
+       (82, 003, 4, 8),
+       (83, 003, 4, 10),
+       (84, 003, 3, 10),
+       (85, 003, 0, 7),
+       (86, 003, 2, 7),
+       (87, 003, 2, 9),
+       (88, 003, 0, 9),
+       (89, 003, 0, 9),
+       (90, 003, 2, 9),
+       (91, 003, 2, 10),
+       (92, 003, 0, 10),
+       (93, 003, 0, 5),
+       (94, 003, 1, 5),
+       (95, 003, 1, 7),
+       (96, 003, 0, 7),
+       (97, 003, 1, 3),
+       (98, 003, 2, 3),
+       (99, 003, 2, 7),
+       (100, 003, 1, 7),
+       (101, 003, 0, 3),
+       (102, 003, 1, 3),
+       (103, 003, 1, 5),
+       (104, 003, 0, 5),
+       # Pianta 004
+       (1, 004, 0, 0),
+       (2, 004, 10, 0),
+       (3, 004, 10, 10),
+       (4, 004, 0, 10),
+       (5, 004, 2, 2),
+       (6, 004, 8, 2),
+       (7, 004, 8, 8),
+       (8, 004, 7, 8),
+       (9, 004, 7, 10),
+       (10, 004, 6, 10),
+       (11, 004, 6, 8),
+       (12, 004, 4, 8),
+       (13, 004, 4, 10),
+	   (14, 004, 3, 10),
+       (15, 004, 3, 8),
+       (16, 004, 2, 8),
+       (17, 004, 4, 8),
+       (18, 004, 6, 8),
+       (19, 004, 6, 10),
+       (20, 004, 4, 10),
+       (21, 004, 0, 0),
+       (22, 004, 1, 0),
+       (23, 004, 1, 1),
+       (24, 004, 0, 1),
+       (25, 004, 1, 0),
+       (26, 004, 3, 0),
+       (27, 004, 3, 2),
+       (28, 004, 1, 2),
+       (29, 004, 0, 2),
+       (30, 004, 2, 2),
+       (31, 004, 2, 3),
+       (32, 004, 0, 3),
+       (33, 004, 3, 0),
+       (34, 004, 5, 0),
+       (35, 004, 5, 1),
+       (36, 004, 3, 1),
+       (37, 004, 3, 1),
+       (38, 004, 7, 1),
+       (39, 004, 7, 2),
+       (40, 004, 3, 2),
+       (41, 004, 5, 0),
+       (42, 004, 7, 0),
+       (43, 004, 7, 1),
+       (44, 004, 5, 1),
+       (45, 004, 9, 0),
+       (46, 004, 10, 0),
+       (47, 004, 10, 2),
+       (48, 004, 9, 2),
+       (49, 004, 7, 0),
+       (50, 004, 9, 0),
+       (51, 004, 9, 2),
+       (52, 004, 7, 2),
+       (53, 004, 8, 2),
+       (54, 004, 10, 2),
+       (55, 004, 10, 3),
+       (56, 004, 8, 3),
+       (57, 004, 9, 5),
+       (58, 004, 10, 5),
+       (59, 004, 10, 7),
+       (60, 004, 9, 7),
+       (61, 004, 8, 3),
+       (62, 004, 9, 3),
+       (63, 004, 9, 7),
+       (64, 004, 8, 7),
+       (65, 004, 9, 3),
+       (66, 004, 10, 3),
+       (67, 004, 10, 5),
+       (68, 004, 9, 5),
+       (69, 004, 9, 8),
+       (70, 004, 10, 8),
+       (71, 004, 10, 10),
+       (72, 004, 9, 10),
+       (73, 004, 7, 8),
+       (74, 004, 9, 8),
+       (75, 004, 9, 10),
+       (76, 004, 7, 10),
+       (77, 004, 8, 7),
+       (78, 004, 10, 7),
+       (79, 004, 10, 8),
+       (80, 004, 8, 8),
+       (81, 004, 3, 8),
+       (82, 004, 4, 8),
+       (83, 004, 4, 10),
+       (84, 004, 3, 10),
+       (85, 004, 0, 7),
+       (86, 004, 2, 7),
+       (87, 004, 2, 9),
+       (88, 004, 0, 9),
+       (89, 004, 0, 9),
+       (90, 004, 2, 9),
+       (91, 004, 2, 10),
+       (92, 004, 0, 10),
+       (93, 004, 0, 5),
+       (94, 004, 1, 5),
+       (95, 004, 1, 7),
+       (96, 004, 0, 7),
+       (97, 004, 1, 3),
+       (98, 004, 2, 3),
+       (99, 004, 2, 7),
+       (100, 004, 1, 7),
+       (101, 004, 0, 3),
+       (102, 004, 1, 3),
+       (103, 004, 1, 5),
+       (104, 004, 0, 5),
+       # Pianta 005
+       (1, 005, 0, 0),
+       (2, 005, 10, 0),
+       (3, 005, 10, 10),
+       (4, 005, 0, 10),
+       (5, 005, 2, 2),
+       (6, 005, 8, 2),
+       (7, 005, 8, 8),
+       (8, 005, 7, 8),
+       (9, 005, 7, 10),
+       (10, 005, 6, 10),
+       (11, 005, 6, 8),
+       (12, 005, 4, 8),
+       (13, 005, 4, 10),
+	   (14, 005, 3, 10),
+       (15, 005, 3, 8),
+       (16, 005, 2, 8),
+       (17, 005, 4, 8),
+       (18, 005, 6, 8),
+       (19, 005, 6, 10),
+       (20, 005, 4, 10),
+       (21, 005, 0, 0),
+       (22, 005, 1, 0),
+       (23, 005, 1, 1),
+       (24, 005, 0, 1),
+       (25, 005, 1, 0),
+       (26, 005, 3, 0),
+       (27, 005, 3, 2),
+       (28, 005, 1, 2),
+       (29, 005, 0, 2),
+       (30, 005, 2, 2),
+       (31, 005, 2, 3),
+       (32, 005, 0, 3),
+       (33, 005, 3, 0),
+       (34, 005, 5, 0),
+       (35, 005, 5, 1),
+       (36, 005, 3, 1),
+       (37, 005, 3, 1),
+       (38, 005, 7, 1),
+       (39, 005, 7, 2),
+       (40, 005, 3, 2),
+       (41, 005, 5, 0),
+       (42, 005, 7, 0),
+       (43, 005, 7, 1),
+       (44, 005, 5, 1),
+       (45, 005, 9, 0),
+       (46, 005, 10, 0),
+       (47, 005, 10, 2),
+       (48, 005, 9, 2),
+       (49, 005, 7, 0),
+       (50, 005, 9, 0),
+       (51, 005, 9, 2),
+       (52, 005, 7, 2),
+       (53, 005, 8, 2),
+       (54, 005, 10, 2),
+       (55, 005, 10, 3),
+       (56, 005, 8, 3),
+       (57, 005, 9, 5),
+       (58, 005, 10, 5),
+       (59, 005, 10, 7),
+       (60, 005, 9, 7),
+       (61, 005, 8, 3),
+       (62, 005, 9, 3),
+       (63, 005, 9, 7),
+       (64, 005, 8, 7),
+       (65, 005, 9, 3),
+       (66, 005, 10, 3),
+       (67, 005, 10, 5),
+       (68, 005, 9, 5),
+       (69, 005, 9, 8),
+       (70, 005, 10, 8),
+       (71, 005, 10, 10),
+       (72, 005, 9, 10),
+       (73, 005, 7, 8),
+       (74, 005, 9, 8),
+       (75, 005, 9, 10),
+       (76, 005, 7, 10),
+       (77, 005, 8, 7),
+       (78, 005, 10, 7),
+       (79, 005, 10, 8),
+       (80, 005, 8, 8),
+       (81, 005, 3, 8),
+       (82, 005, 4, 8),
+       (83, 005, 4, 10),
+       (84, 005, 3, 10),
+       (85, 005, 0, 7),
+       (86, 005, 2, 7),
+       (87, 005, 2, 9),
+       (88, 005, 0, 9),
+       (89, 005, 0, 9),
+       (90, 005, 2, 9),
+       (91, 005, 2, 10),
+       (92, 005, 0, 10),
+       (93, 005, 0, 5),
+       (94, 005, 1, 5),
+       (95, 005, 1, 7),
+       (96, 005, 0, 7),
+       (97, 005, 1, 3),
+       (98, 005, 2, 3),
+       (99, 005, 2, 7),
+       (100, 005, 1, 7),
+       (101, 005, 0, 3),
+       (102, 005, 1, 3),
+       (103, 005, 1, 5),
+       (104, 005, 0, 5),
+	   # Pianta 006 
+       (1, 006, 0, 0),
+       (2, 006, 18, 0),
+       (3, 006, 18, 10),
+	   (4, 006, 0, 10),
+       (5, 006, 8, 0),
+       (6, 006, 10, 0),
+       (7, 006, 10, 4),
+       (8, 006, 14, 4),
+       (9, 006, 14, 6),
+       (10, 006, 10, 6),
+       (11, 006, 10, 10),
+       (12, 006, 8, 10),
+       (13, 006, 8, 6),
+       (14, 006, 8, 6),
+       (15, 006, 8, 4),
+       (16, 006, 8, 4),
+       (17, 006, 14, 4),
+       (18, 006, 18, 4),
+       (19, 006, 18, 10),
+       (20, 006, 10, 10),
+       (21, 006, 10, 6),
+       (22, 006, 14, 6),
+       (23, 006, 10, 0),
+       (24, 006, 18, 0),
+       (25, 006, 18, 4),
+       (26, 006, 10, 4),
+       (27, 006, 0, 0),
+       (28, 006, 8, 0),
+       (29, 006, 8, 4),
+       (30, 006, 4, 4),
+       (31, 006, 4, 6),
+       (32, 006, 0, 6),
+       (33, 006, 0, 6),
+       (34, 006, 8, 6),
+       (35, 006, 8, 10),
+       (36, 006, 0, 10),
+       # Pianta 007
+       (1, 007, 0, 0),
+       (2, 007, 18, 0),
+       (3, 007, 18, 10),
+	   (4, 007, 0, 10),
+       (5, 007, 0, 4),
+       (6, 007, 18, 4),
+       (7, 007, 18, 6),
+       (8, 007, 0, 6),
+       (9, 007, 0, 0),
+       (10, 007, 8, 0),
+       (11, 007, 8, 4),
+       (12, 007, 0, 4),
+       (13, 007, 8, 0),
+       (14, 007, 18, 0),
+       (15, 007, 18, 4),
+       (16, 007, 8, 4),
+       (17, 007, 11, 6),
+       (18, 007, 18, 6),
+       (19, 007, 18, 10),
+       (20, 007, 11, 10),
+       (21, 007, 4, 6),
+       (22, 007, 11, 6),
+       (23, 007, 11, 10),
+       (24, 007, 4, 10),
+       (25, 007, 0, 6),
+       (26, 007, 4, 6),
+       (27, 007, 4, 10),
+       (28, 007, 0, 10),
+       # Pianta 008 
+       (1, 008, 0, 0),
+       (2, 008, 18, 0),
+       (3, 008, 18, 10),
+	   (4, 008, 0, 10),
+       (5, 008, 8, 0),
+       (6, 008, 10, 0),
+       (7, 008, 10, 4),
+       (8, 008, 14, 4),
+       (9, 008, 14, 6),
+       (10, 008, 10, 6),
+       (11, 008, 10, 10),
+       (12, 008, 8, 10),
+       (13, 008, 8, 6),
+       (14, 008, 8, 6),
+       (15, 008, 8, 4),
+       (16, 008, 8, 4),
+       (17, 008, 14, 4),
+       (18, 008, 18, 4),
+       (19, 008, 18, 10),
+       (20, 008, 10, 10),
+       (21, 008, 10, 6),
+       (22, 008, 14, 6),
+       (23, 008, 10, 0),
+       (24, 008, 18, 0),
+       (25, 008, 18, 4),
+       (26, 008, 10, 4),
+       (27, 008, 0, 0),
+       (28, 008, 8, 0),
+       (29, 008, 8, 4),
+       (30, 008, 4, 4),
+       (31, 008, 4, 6),
+       (32, 008, 0, 6),
+       (33, 008, 0, 6),
+       (34, 008, 8, 6),
+       (35, 008, 8, 10),
+       (36, 008, 0, 10),
+       # Pianta 009
+       (1, 009, 0, 0),
+       (2, 009, 18, 0),
+       (3, 009, 18, 10),
+	   (4, 009, 0, 10),
+       (5, 009, 0, 4),
+       (6, 009, 18, 4),
+       (7, 009, 18, 6),
+       (8, 009, 0, 6),
+       (9, 009, 0, 0),
+       (10, 009, 8, 0),
+       (11, 009, 8, 4),
+       (12, 009, 0, 4),
+       (13, 009, 8, 0),
+       (14, 009, 18, 0),
+       (15, 009, 18, 4),
+       (16, 009, 8, 4),
+       (17, 009, 11, 6),
+       (18, 009, 18, 6),
+       (19, 009, 18, 10),
+       (20, 009, 11, 10),
+       (21, 009, 4, 6),
+       (22, 009, 11, 6),
+       (23, 009, 11, 10),
+       (24, 009, 4, 10),
+       (25, 009, 0, 6),
+       (26, 009, 4, 6),
+       (27, 009, 4, 10),
+       (28, 009, 0, 10),
+       # Pianta 010
+       (1, 010, 0, 0),
+       (2, 010, 12, 0),
+       (3, 010, 12, 12),
+       (4, 010, 0, 12),
+       (5, 010, 0, 0),
+       (6, 010, 12, 0),
+       (7, 010, 12, 12),
+       (8, 010, 0, 12),
+       # Pianta 011
+       (1, 011, 0, 0),
+       (2, 011, 12, 0),
+       (3, 011, 12, 12),
+       (4, 011, 0, 12),
+       (5, 011, 0, 6),
+       (6, 011, 6, 6),
+       (7, 011, 6, 12),
+       (8, 011, 0, 12),
+       (9, 011, 6, 6),
+       (10, 011, 12, 6),
+       (11, 011, 12, 12),
+       (12, 011, 6, 12),
+       (13, 011, 0, 0),
+       (14, 011, 6, 0),
+       (15, 011, 6, 6),
+       (16, 011, 0, 6),
+       (17, 011, 6, 0),
+       (18, 011, 12, 0),
+       (19, 011, 12, 6),
+       (20, 011, 6, 6);
        
 INSERT INTO PosizionamentoVano(Vano, Vertice, Pianta)
-VALUES (001, 7, 001),
-	   (001, 8, 001),
+VALUES # Pianta 001
+	   (001, 7, 001),
+       (001, 8, 001),
        (001, 9, 001),
-       (001, 10, 001);*/
+       (001, 10, 001),
+       (002, 11, 001),
+       (002, 12, 001),
+       (002, 13, 001),
+       (002, 14, 001),
+       (003, 15, 001),
+       (003, 16, 001),
+       (003, 17, 001),
+       (003, 18, 001),
+       (004, 19, 001),
+       (004, 20, 001),
+       (004, 21, 001),
+       (004, 22, 001),
+       (005, 23, 001),
+       (005, 24, 001),
+       (005, 25, 001),
+       (005, 26, 001),
+       (006, 27, 001),
+       (006, 28, 001),
+       (006, 29, 001),
+       (006, 30, 001),
+       (007, 31, 001),
+       (007, 32, 001),
+       (007, 33, 001),
+       (007, 34, 001),
+       (007, 35, 001),
+       (007, 36, 001),
+       # Pianta 002
+       (008, 5, 002),
+       (008, 6, 002),
+       (008, 7, 002),
+       (008, 8, 002),
+       (008, 9, 002),
+       (008, 10, 002),
+       (008, 11, 002),
+       (008, 12, 002),
+       (008, 13, 002),
+       (008, 14, 002),
+       (009, 15, 002),
+       (009, 16, 002),
+       (009, 17, 002),
+       (009, 18, 002),
+       (010, 19, 002),
+       (010, 20, 002),
+       (010, 21, 002),
+       (010, 22, 002),
+       (011, 23, 002),
+       (011, 24, 002),
+       (011, 25, 002),
+       (011, 26, 002),
+       (012, 27, 002),
+       (012, 28, 002),
+       (012, 29, 002),
+       (012, 30, 002),
+       # Pianta 003
+       (013, 5, 003),
+       (013, 6, 003),
+       (013, 7, 003),
+       (013, 8, 003),
+       (013, 9, 003),
+       (013, 10, 003),
+       (013, 11, 003),
+       (013, 12, 003),
+       (013, 13, 003),
+       (013, 14, 003),
+       (013, 15, 003),
+       (013, 16, 003),
+       (014, 17, 003),
+       (014, 18, 003),
+       (014, 19, 003),
+       (014, 20, 003),
+       (015, 21, 003),
+       (015, 22, 003),
+       (015, 23, 003),
+       (015, 24, 003),
+       (016, 25, 003),
+       (016, 26, 003),
+       (016, 27, 003),
+       (016, 28, 003),
+       (017, 29, 003),
+       (017, 30, 003),
+       (017, 31, 003),
+       (017, 32, 003),
+       (018, 33, 003),
+       (018, 34, 003),
+       (018, 35, 003),
+       (018, 36, 003),
+       (019, 37, 003),
+       (019, 38, 003),
+       (019, 39, 003),
+       (019, 40, 003),
+       (020, 41, 003),
+       (020, 42, 003),
+       (020, 43, 003),
+       (020, 44, 003),
+       (021, 45, 003),
+       (021, 46, 003),
+       (021, 47, 003),
+       (021, 48, 003),
+       (022, 49, 003),
+       (022, 50, 003),
+       (022, 51, 003),
+       (022, 52, 003),
+       (023, 53, 003),
+       (023, 54, 003),
+       (023, 55, 003),
+       (023, 56, 003),
+       (024, 57, 003),
+       (024, 58, 003),
+       (024, 59, 003),
+       (024, 60, 003),
+       (025, 61, 003),
+       (025, 62, 003),
+       (025, 63, 003),
+       (025, 64, 003),
+       (026, 65, 003),
+       (026, 66, 003),
+       (026, 67, 003),
+       (026, 68, 003),
+       (027, 69, 003),
+       (027, 70, 003),
+       (027, 71, 003),
+       (027, 72, 003),
+       (028, 73, 003),
+       (028, 74, 003),
+       (028, 75, 003),
+       (028, 76, 003),
+       (029, 77, 003),
+       (029, 78, 003),
+       (029, 79, 003),
+       (029, 80, 003),
+       (030, 81, 003),
+       (030, 82, 003),
+       (030, 83, 003),
+       (030, 84, 003),
+       (031, 85, 003),
+       (031, 86, 003),
+       (031, 87, 003),
+       (031, 88, 003),
+       (032, 89, 003),
+       (032, 90, 003),
+       (032, 91, 003),
+       (032, 92, 003),
+       (033, 93, 003),
+       (033, 94, 003),
+       (033, 95, 003),
+       (033, 96, 003),
+       (034, 97, 003),
+       (034, 98, 003),
+       (034, 99, 003),
+       (034, 100, 003),
+       (035, 101, 003),
+       (035, 102, 003),
+       (035, 103, 003),
+       (035, 104, 003),
+       # Pianta 004
+	   (036, 5, 004),
+       (036, 6, 004),
+       (036, 7, 004),
+       (036, 8, 004),
+       (036, 9, 004),
+       (036, 10, 004),
+       (036, 11, 004),
+       (036, 12, 004),
+       (036, 13, 004),
+       (036, 14, 004),
+       (036, 15, 004),
+       (036, 16, 004),
+       (037, 17, 004),
+       (037, 18, 004),
+       (037, 19, 004),
+       (037, 20, 004),
+       (038, 21, 004),
+       (038, 22, 004),
+       (038, 23, 004),
+       (038, 24, 004),
+       (039, 25, 004),
+       (039, 26, 004),
+       (039, 27, 004),
+       (039, 28, 004),
+       (040, 29, 004),
+       (040, 30, 004),
+       (040, 31, 004),
+       (040, 32, 004),
+       (041, 33, 004),
+       (041, 34, 004),
+       (041, 35, 004),
+       (041, 36, 004),
+       (042, 37, 004),
+       (042, 38, 004),
+       (042, 39, 004),
+       (042, 40, 004),
+       (043, 41, 004),
+       (043, 42, 004),
+       (043, 43, 004),
+       (043, 44, 004),
+       (044, 45, 004),
+       (044, 46, 004),
+       (044, 47, 004),
+       (044, 48, 004),
+       (045, 49, 004),
+       (045, 50, 004),
+       (045, 51, 004),
+       (045, 52, 004),
+       (046, 53, 004),
+       (046, 54, 004),
+       (046, 55, 004),
+       (046, 56, 004),
+       (047, 57, 004),
+       (047, 58, 004),
+       (047, 59, 004),
+       (047, 60, 004),
+       (048, 61, 004),
+       (048, 62, 004),
+       (048, 63, 004),
+       (048, 64, 004),
+       (049, 65, 004),
+       (049, 66, 004),
+       (049, 67, 004),
+       (049, 68, 004),
+       (050, 69, 004),
+       (050, 70, 004),
+       (050, 71, 004),
+       (050, 72, 004),
+       (051, 73, 004),
+       (051, 74, 004),
+       (051, 75, 004),
+       (051, 76, 004),
+       (052, 77, 004),
+       (052, 78, 004),
+       (052, 79, 004),
+       (052, 80, 004),
+       (053, 81, 004),
+       (053, 82, 004),
+       (053, 83, 004),
+       (053, 84, 004),
+       (054, 85, 004),
+       (054, 86, 004),
+       (054, 87, 004),
+       (054, 88, 004),
+       (055, 89, 004),
+       (055, 90, 004),
+       (055, 91, 004),
+       (055, 92, 004),
+       (056, 93, 004),
+       (056, 94, 004),
+       (056, 95, 004),
+       (056, 96, 004),
+       (057, 97, 004),
+       (057, 98, 004),
+       (057, 99, 004),
+       (057, 100, 004),
+       (058, 101, 004),
+       (058, 102, 004),
+       (058, 103, 004),
+       (058, 104, 004),
+	   # Pianta 005
+       (059, 5, 005),
+       (059, 6, 005),
+       (059, 7, 005),
+       (059, 8, 005),
+       (059, 9, 005),
+       (059, 10, 005),
+       (059, 11, 005),
+       (059, 12, 005),
+       (059, 13, 005),
+       (059, 14, 005),
+       (059, 15, 005),
+       (059, 16, 005),
+       (060, 17, 005),
+       (060, 18, 005),
+       (060, 19, 005),
+       (060, 20, 005),
+       (061, 21, 005),
+       (061, 22, 005),
+       (061, 23, 005),
+       (061, 24, 005),
+       (062, 25, 005),
+       (062, 26, 005),
+       (062, 27, 005),
+       (062, 28, 005),
+       (063, 29, 005),
+       (063, 30, 005),
+       (063, 31, 005),
+       (063, 32, 005),
+       (064, 33, 005),
+       (064, 34, 005),
+       (064, 35, 005),
+       (064, 36, 005),
+       (065, 37, 005),
+       (065, 38, 005),
+       (065, 39, 005),
+       (065, 40, 005),
+       (066, 41, 005),
+       (066, 42, 005),
+       (066, 43, 005),
+       (066, 44, 005),
+       (067, 45, 005),
+       (067, 46, 005),
+       (067, 47, 005),
+       (067, 48, 005),
+       (068, 49, 005),
+       (068, 50, 005),
+       (068, 51, 005),
+       (068, 52, 005),
+       (069, 53, 005),
+       (069, 54, 005),
+       (069, 55, 005),
+       (069, 56, 005),
+       (070, 57, 005),
+       (070, 58, 005),
+       (070, 59, 005),
+       (070, 60, 005),
+       (071, 61, 005),
+       (071, 62, 005),
+       (071, 63, 005),
+       (071, 64, 005),
+       (072, 65, 005),
+       (072, 66, 005),
+       (072, 67, 005),
+       (072, 68, 005),
+       (073, 69, 005),
+       (073, 70, 005),
+       (073, 71, 005),
+       (073, 72, 005),
+       (074, 73, 005),
+       (074, 74, 005),
+       (074, 75, 005),
+       (074, 76, 005),
+       (075, 77, 005),
+       (075, 78, 005),
+       (075, 79, 005),
+       (075, 80, 005),
+       (076, 81, 005),
+       (076, 82, 005),
+       (076, 83, 005),
+       (076, 84, 005),
+       (077, 85, 005),
+       (077, 86, 005),
+       (077, 87, 005),
+       (077, 88, 005),
+       (078, 89, 005),
+       (078, 90, 005),
+       (078, 91, 005),
+       (078, 92, 005),
+       (079, 93, 005),
+       (079, 94, 005),
+       (079, 95, 005),
+       (079, 96, 005),
+       (080, 97, 005),
+       (080, 98, 005),
+       (080, 99, 005),
+       (080, 100, 005),
+       (081, 101, 005),
+       (081, 102, 005),
+       (081, 103, 005),
+       (081, 104, 005),
+       # Pianta 006
+       (082, 5, 006),
+       (082, 6, 006),
+       (082, 7, 006),
+       (082, 8, 006),
+       (082, 9, 006),
+       (082, 10, 006),
+       (082, 11, 006),
+       (082, 12, 006),
+       (082, 13, 006),
+       (082, 14, 006),
+       (082, 15, 006),
+       (082, 16, 006),
+       (083, 17, 006),
+       (083, 18, 006),
+       (083, 19, 006),
+       (083, 20, 006),
+       (083, 21, 006),
+       (083, 22, 006),
+       (084, 23, 006),
+       (084, 24, 006),
+       (084, 25, 006),
+       (084, 26, 006),
+       (085, 27, 006),
+       (085, 28, 006),
+       (085, 29, 006),
+       (085, 30 ,006),
+       (085, 31, 006),
+       (085, 32, 006),
+       (086, 33, 006),
+       (086, 34, 006),
+       (086, 35, 006),
+       (086, 36, 006),
+       # Pianta 007
+       (087, 5, 007),
+       (087, 6, 007),
+       (087, 7, 007),
+       (087, 8, 007),
+       (088, 9, 007),
+       (088, 10, 007),
+       (088, 11, 007),
+       (088, 12, 007),
+       (089, 13, 007),
+       (089, 14, 007),
+       (089, 15, 007),
+       (089, 16, 007),
+       (090, 17, 007),
+       (090, 18, 007),
+       (090, 19, 007),
+       (090, 20, 007),
+       (091, 21, 007),
+       (091, 22, 007),
+       (091, 23, 007),
+       (091, 24, 007),
+       (092, 25, 007),
+       (092, 26, 007),
+       (092, 27, 007),
+       (092, 28, 007),
+       # Pianta 008
+       (093, 5, 008),
+       (093, 6, 008),
+       (093, 7, 008),
+       (093, 8, 008),
+       (093, 9, 008),
+       (093, 10, 008),
+       (093, 11, 008),
+       (093, 12, 008),
+       (093, 13, 008),
+       (093, 14, 008),
+       (093, 15, 008),
+       (093, 16, 008),
+       (094, 17, 008),
+       (094, 18, 008),
+       (094, 19, 008),
+       (094, 20, 008),
+       (094, 21, 008),
+       (094, 22, 008),
+       (095, 23, 008),
+       (095, 24, 008),
+       (095, 25, 008),
+       (095, 26, 008),
+       (096, 27, 008),
+       (096, 28, 008),
+       (096, 29, 008),
+       (096, 30 ,008),
+       (096, 31, 008),
+       (096, 32, 008),
+       (097, 33, 008),
+       (097, 34, 008),
+       (097, 35, 008),
+       (097, 36, 008),
+       # Pianta 009
+       (098, 5, 009),
+       (098, 6, 009),
+       (098, 7, 009),
+       (098, 8, 009),
+       (099, 9, 009),
+       (099, 10, 009),
+       (099, 11, 009),
+       (099, 12, 009),
+       (100, 13, 009),
+       (100, 14, 009),
+       (100, 15, 009),
+       (100, 16, 009),
+       (101, 17, 009),
+       (101, 18, 009),
+       (101, 19, 009),
+       (101, 20, 009),
+       (102, 21, 009),
+       (102, 22, 009),
+       (102, 23, 009),
+       (102, 24, 009),
+       (103, 25, 009),
+       (103, 26, 009),
+       (103, 27, 009),
+       (103, 28, 009),
+       # Pianta 010
+       (104, 5, 010),
+       (104, 6, 010),
+       (104, 7, 010),
+       (104, 8, 010),
+       # Pianta 011
+       (105, 5, 011),
+       (105, 6, 011),
+       (105, 7, 011),
+       (105, 8, 011),
+       (106, 9, 011),
+       (106, 10, 011),
+       (106, 11, 011),
+       (106, 12, 011),
+       (107, 13, 011),
+       (107, 14, 011),
+       (107, 15, 011),
+       (107, 16, 011),
+       (108, 17, 011),
+       (108, 18, 011),
+       (108, 19, 011),
+       (108, 20, 011);
 
 INSERT INTO ProgettoEdilizio(Tipo, DataApprovazione, DataInizio, StimaFine, DataFine, Edificio)
 VALUES ('Costruzione', '2017-01-01', '2017-04-04', '2018-04-04', '2018-05-01', 001), 
        ('Costruzione', '2018-03-15', '2018-07-16', '2019-08-28', '2019-09-30', 002),
        ('Costruzione', '2019-02-04', '2019-05-19', '2020-06-08', '2020-06-30', 003),
-       ('Riparazione', '2019-03-06', '2019-04-06', '2019-05-08', '2019-05-14', 001),
-       ('Riparazione', '2019-03-10', '2019-04-10', '2019-05-12', '2019-05-12', 002),
+       ('Riparazione', '2020-03-06', '2020-04-06', '2020-05-08', '2020-05-14', 001),
+       ('Riparazione', '2020-03-10', '2020-04-10', '2020-05-12', '2020-05-12', 002),
        ('Costruzione', '2020-07-17', '2020-10-11', '2021-12-13', '2022-02-24', 004),
        ('Costruzione', '2021-04-04', '2021-08-06', '2023-02-04', NULL, 005);
        
@@ -6486,11 +7969,11 @@ VALUES (1, 001, '2017-04-04', '2017-04-22', '2017-04-25', 'Fondamenta', 7000),
        (4, 003, '2019-12-02', '2020-02-20', '2020-03-03', 'Fissaggio', 12900),
        (5, 003, '2020-03-11', '2020-04-19', '2020-04-21', 'Adattamento', 8200),
        (6, 003, '2020-04-27', '2020-06-08', '2020-06-30', 'Rifinitura', 800),
-       (1, 004, '2019-04-06', '2019-04-15', '2019-04-15', 'Riparazione Servizi', 280),
-       (2, 004, '2019-04-16', '2019-04-29', '2019-04-30', 'Riparazione Sistema Antisismico', 1200),
-       (3, 004, '2019-05-03', '2019-05-10', '2019-05-10', 'Riparazione Pavimentazione', 800),
-       (4, 004, '2019-05-11', '2019-05-14', '2019-05-14', 'Riparazione Caldaia', 70),
-       (1, 005, '2019-04-10', '2019-05-12', '2019-05-12', 'Riparazione Facciata', 10000),
+       (1, 004, '2020-04-06', '2020-04-15', '2020-04-15', 'Riparazione Servizi', 280),
+       (2, 004, '2020-04-16', '2020-04-29', '2020-04-30', 'Riparazione Sistema Antisismico', 1200),
+       (3, 004, '2020-05-03', '2020-05-10', '2020-05-10', 'Riparazione Pavimentazione', 800),
+       (4, 004, '2020-05-11', '2020-05-14', '2020-05-14', 'Riparazione Caldaia', 70),
+       (1, 005, '2020-04-10', '2020-05-12', '2020-05-12', 'Riparazione Facciata', 10000),
        (1, 006, '2020-10-12', '2020-11-09', '2020-11-09', 'Fondamenta', 8700),
 	   (2, 006, '2020-11-11', '2020-11-20', '2020-11-24', 'Riparazione Stadio di Avanzamento 1', 900),
        (3, 006, '2020-11-30', '2021-02-04', '2021-02-08', 'Intelaiatura', 21000),
@@ -6676,17 +8159,17 @@ VALUES # Costruzione Edificio 001
        ('2020-05-18', '2020-06-19', 6, 003, 'Attivazione Servizi'),
        ('2020-06-22', '2020-06-30', 6, 003, 'Ispezione Finale'),
        # Riparazione 1 Edificio 004
-       ('2019-04-06', '2019-04-15', 1, 004, 'Riparazione Impianto Elettrico'),
-       ('2019-04-06', '2019-04-15', 1, 004, 'Riparazione Impianto Telefonico'),
-       ('2019-04-06', '2019-04-15', 1, 004, 'Riparazione Impianto Idraulico'),
-       ('2019-04-06', '2019-04-15', 1, 004, 'Riparazione Riscaldamento'),
-       ('2019-04-16', '2019-04-30', 2, 004, 'Riparazione Sistema Antisismico'),
-       ('2019-05-03', '2019-05-03', 3, 004, 'Riparazione Pavimento'),
-       ('2019-05-11', '2019-05-13', 4, 004, 'Riparazione Caldaia'),
-       ('2019-05-14', '2019-05-14', 4, 004, 'Ispezione Caldaia'),
+       ('2020-04-06', '2020-04-15', 1, 004, 'Riparazione Impianto Elettrico'),
+       ('2020-04-06', '2020-04-15', 1, 004, 'Riparazione Impianto Telefonico'),
+       ('2020-04-06', '2020-04-15', 1, 004, 'Riparazione Impianto Idraulico'),
+       ('2020-04-06', '2020-04-15', 1, 004, 'Riparazione Riscaldamento'),
+       ('2020-04-16', '2020-04-30', 2, 004, 'Riparazione Sistema Antisismico'),
+       ('2020-05-03', '2020-05-03', 3, 004, 'Riparazione Pavimento'),
+       ('2020-05-11', '2020-05-13', 4, 004, 'Riparazione Caldaia'),
+       ('2020-05-14', '2020-05-14', 4, 004, 'Ispezione Caldaia'),
 	   # Riparazione 1 Edificio 002
-       ('2019-04-10', '2019-05-11', 1, 005, 'Riparazione Facciata'),
-       ('2019-04-12', '2019-05-12', 1, 005, 'Ispezione Finale'),
+       ('2020-04-10', '2020-05-11', 1, 005, 'Riparazione Facciata'),
+       ('2020-04-12', '2020-05-12', 1, 005, 'Ispezione Finale'),
        # Costruzione Edificio 004
        ('2020-10-12', '2020-10-15', 1, 006, 'Scavo'),
        ('2020-10-16', '2020-10-16', 1, 006, 'Posizionamento Barre di Rinforzo'),
@@ -6824,6 +8307,7 @@ VALUES ('PNTFNC88B04G491N', 001),
        ('GVRCRN79L55H199W', 007),
        ('VLSGAI81H48C342W', 007);
        
+       
 INSERT INTO Calamita(Area, Data, Orario, Nome, Epicentro, Intensita)
 VALUES  (001, '2017-01-18', '16:48:00', 'Valanga', 3.7, 9),
 		(016, '2017-09-09', '21:00:00', 'Alluvione', 3.7, 9),
@@ -6837,18 +8321,19 @@ VALUES  (001, '2017-01-18', '16:48:00', 'Valanga', 3.7, 9),
         (003, '2018-11-02', '15:17:24', 'Tornado', 100, 9),
         (013, '2018-11-02', '16:54:22', 'Tornado', 100, 9),
         (015, '2018-11-04', '16:44:44', 'Tornado', 100, 10),
-		(016, '2019-11-01', '11:30:45', 'Terremoto', 60, 6),
         (001, '2019-11-26', '03:54:11', 'Terremoto', 30, 3),
         (002, '2019-11-26', '03:54:11', 'Terremoto', 30, 3),
         (004, '2019-11-26', '03:54:11', 'Terremoto', 30, 3),
 		(011, '2019-11-26', '03:54:11', 'Terremoto', 30, 3),
         (013, '2019-11-26', '03:54:11', 'Terremoto', 30, 3),
         (015, '2019-11-26', '03:54:11', 'Terremoto', 30, 3),
+        (016, '2020-03-01', '11:30:45', 'Terremoto', 60, 7),
+        (020, '2022-04-04', '04:44:44', 'Terremoto', 45, 8),
         (017, '2022-07-03', '17:00:00', 'Valanga', 0.7, 8),
         (020, '2022-07-03', '17:00:00', 'Valanga', 0.7, 8),
         (010, '2022-09-15', '17:00:00', 'Alluvione', 4.2, 9),
         (010, '2022-09-15', '19:30:00', 'Inondazione', 1.2, 5);
-        
+
 
 DROP PROCEDURE IF EXISTS Popolamento_Impiego_Materiali;
 DELIMITER $$
@@ -9296,11 +10781,15 @@ BEGIN
 		FROM ImpiegoPiastrelle IP INNER JOIN Lavoro L ON IP.Lavoro = L.Codice_Lavoro
 								  INNER JOIN ProgettoEdilizio PE ON L.Progetto = PE.ID_Progetto
 		WHERE L.TipologiaDiLavoro = 'Pavimentazione'
+			 AND
+              PE.DataInizio < '2022-11-01'
 		UNION
 		SELECT IP.Lotto_Pietre AS Lotto, L.TipologiaDiLavoro, PE.Edificio
 		FROM ImpiegoPietre IP INNER JOIN Lavoro L ON IP.Lavoro = L.Codice_Lavoro
 							  INNER JOIN ProgettoEdilizio PE ON L.Progetto = PE.ID_Progetto
-		WHERE L.TipologiaDiLavoro = 'Costruzione e Definizione Stanze';
+		WHERE L.TipologiaDiLavoro = 'Costruzione e Definizione Stanze'
+			AND
+			  PE.DataInizio < '2022-11-01';
 	 DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
 	
     OPEN cursore_piastrelle;
@@ -9330,7 +10819,854 @@ BEGIN
         END IF;
     END LOOP;
     CLOSE cursore_piastrelle;
+END $$
+DELIMITER ;
+
+
+DROP PROCEDURE IF EXISTS Popolamento_Sensori;
+DELIMITER $$
+CREATE PROCEDURE Popolamento_Sensori()
+BEGIN
+    DECLARE finito INT DEFAULT 0;
+    DECLARE vano INT DEFAULT 0;
+    DECLARE codice INT DEFAULT 1;
+    DECLARE muri_esterni INT DEFAULT 0;
+    DECLARE edificio_attuale, edificio_precedente INT DEFAULT 0;
+    DECLARE stato_edificio FLOAT DEFAULT 0;
+    DECLARE sensori_esterni BOOL DEFAULT FALSE;
     
+    DECLARE cursore_vani CURSOR FOR
+		SELECT V.Codice_Vano
+        FROM Vano V INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
+					INNER JOIN ProgettoEdilizio PE ON P.Edificio = PE.ID_Progetto
+		WHERE PE.DataInizio < '2022-11-01'
+        ORDER BY V.Codice_Vano ASC;
+	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
+	
+    SET edificio_precedente = (SELECT P.Edificio
+							   FROM Pianta P INNER JOIN Vano V ON P.Codice_Pianta = V.Pianta
+							   WHERE V.Codice_Vano = (SELECT MIN(V1.Codice_Vano)
+													  FROM Vano V1));
+	
+    SET stato_edificio = (SELECT E.Stato 
+						  FROM Edificio E
+                          WHERE E.ID = edificio_precedente);
+    
+    OPEN cursore_vani;
+    ciclo: LOOP
+		FETCH cursore_vani INTO vano;
+		IF
+			finito = 1
+		THEN
+			LEAVE ciclo;
+		END IF;
+        
+        SET edificio_attuale = (SELECT P.Edificio
+							    FROM Pianta P INNER JOIN Vano V ON P.Codice_Pianta = V.Pianta
+							    WHERE V.Codice_Vano = vano);
+		IF
+			edificio_attuale <> edificio_precedente
+		THEN
+			SET edificio_precedente = edificio_attuale;
+            SET sensori_esterni = FALSE;
+            SET stato_edificio = (SELECT E.Stato 
+								  FROM Edificio E
+								  WHERE E.ID = edificio_attuale);
+        END IF;
+        
+		
+		SET muri_esterni = (SELECT IFNULL(COUNT(*), 0)
+						    FROM (SELECT M.Esterno
+							      FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice
+										      INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice
+										      INNER JOIN PosizionamentoVano PV1 ON M.V1 = PV1.Vertice
+										      INNER JOIN PosizionamentoVano PV2 ON M.V2 = PV2.Vertice
+							       WHERE M.Esterno = TRUE
+									    AND
+									     PV1.Vano = PV2.Vano
+									    AND 
+									     PV1.Vano = vano) AS D);
+        
+		INSERT INTO Sensore(Codice_Seriale, Categoria, UnitaMisura, Alert, Vano)
+        VALUES (codice, 'Termostato Interno Caldo', '°C', 40, vano),
+			   (codice, 'Termostato Interno Freddo', '°C', -10, vano),
+               (codice+1, 'Igrometro Interno', 'kg/m³', 60, vano);
+		
+        SET codice = codice + 2;
+        
+        IF
+			muri_esterni > 0
+            AND
+            sensori_esterni = FALSE
+		THEN
+			INSERT INTO Sensore(Codice_Seriale, Categoria, UnitaMisura, Alert, Vano)
+			VALUES (codice, 'Accelerometro X', 'm', 0.05, vano),
+				   (codice, 'Accelerometro Y', 'm', 0.05, vano),
+                   (codice, 'Accelerometro Z', 'm', 0.05, vano),
+                   (codice+1, 'Giroscopio X', '°/s', 0.05, vano),
+				   (codice+1, 'Giroscopio Y', '°/s', 0.05, vano),
+                   (codice+1, 'Giroscopio Z', '°/s', 0.05, vano),
+                   (codice+2, 'Termostato Esterno Caldo', '°C', 44, vano),
+				   (codice+2, 'Termostato Esterno Freddo', '°C', -20, vano),
+                   (codice+3, 'Igrometro Esterno', 'kg/m³', 70, vano),
+                   (codice+4, 'Pluviometro', 'mm', 100, vano);
+
+			IF
+				stato_edificio > 2
+			THEN
+				INSERT INTO Sensore(Codice_Seriale, Categoria, UnitaMisura, Alert, Vano)
+				VALUES (codice, 'Posizione', 'cm', 3, vano);
+							
+				SET codice = codice + 1;   
+			END IF;
+
+			SET codice = codice + 5;   
+			SET sensori_esterni = TRUE; 
+        END IF;
+        
+    END LOOP;
+    CLOSE cursore_vani;
+END $$
+DELIMITER ;
+
+
+DROP PROCEDURE IF EXISTS Popolamento_Registrazione_Crepa1;
+DELIMITER $$
+CREATE PROCEDURE Popolamento_Registrazione_Crepa1()
+BEGIN
+	DECLARE finito INT DEFAULT 0;
+    DECLARE numero_sensore INT DEFAULT 0;
+    DECLARE tipo_sensore VARCHAR(50) DEFAULT '';
+    DECLARE data_registrazione DATE DEFAULT NULL;
+    DECLARE valore FLOAT DEFAULT 0;
+    DECLARE muro INT DEFAULT 0;
+    
+    DECLARE cursore_sensori CURSOR FOR
+		SELECT S.Codice_Seriale, S.Categoria, PE.DataFine
+        FROM Sensore S INNER JOIN Vano V ON S.Vano = V.Codice_Vano  		
+					   INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
+					   INNER JOIN ProgettoEdilizio PE ON P.Edificio = PE.ID_Progetto
+		WHERE PE.DataFine <= '2019-11-01'
+			 AND
+              PE.DataFine IS NOT NULL;
+	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
+	
+    OPEN cursore_sensori;
+    ciclo: LOOP
+		FETCH cursore_sensori INTO numero_sensore, tipo_sensore, data_registrazione;
+		IF
+			finito = 1
+		THEN
+			LEAVE ciclo;
+		END IF;
+        
+        SET valore = 0;
+        SET data_registrazione = DATE_ADD(data_registrazione, INTERVAL 1 DAY);
+        
+        cicloReg: LOOP
+			IF
+				data_registrazione > '2022-11-01'
+			THEN
+				LEAVE cicloReg;
+			END IF;
+            
+			IF
+				tipo_sensore = 'Accelerometro X'
+                OR
+                tipo_sensore = 'Accelerometro Y'
+                OR
+                tipo_sensore = 'Accelerometro Z'
+            THEN 
+				SET valore = 0.00001;
+            ELSEIF
+				tipo_sensore = 'Giroscopio X'
+                OR
+                tipo_sensore = 'Giroscopio Y'
+                OR
+                tipo_sensore = 'Giroscopio Z'
+            THEN
+				SET valore = 0.000001;
+            ELSEIF
+				tipo_sensore = 'Termostato Esterno Caldo'
+                OR
+                tipo_sensore = 'Termostato Esterno Freddo'
+            THEN
+				IF
+					MONTH(data_registrazione) <= 2
+                    OR
+                    MONTH(data_registrazione) >= 11
+                THEN
+					SET valore = -5;
+				ELSEIF
+					MONTH(data_registrazione) = 3
+				THEN
+					SET valore = 15;
+				ELSEIF
+					MONTH(data_registrazione) = 4
+				THEN
+					SET valore = 20;
+				ELSEIF
+					MONTH(data_registrazione) = 5
+				THEN
+					SET valore = 25;
+				ELSEIF
+					MONTH(data_registrazione) = 6
+				THEN
+					SET valore = 30;
+				ELSEIF
+					MONTH(data_registrazione) = 7
+                    OR
+                    MONTH(data_registrazione) = 8
+				THEN
+					SET valore = 35;
+				ELSEIF
+					MONTH(data_registrazione) = 9
+                    OR
+                    MONTH(data_registrazione) = 10
+                THEN
+					SET valore = 20;
+                END IF;
+			ELSEIF
+				tipo_sensore = 'Termostato Interno Caldo'
+                OR
+                tipo_sensore = 'Termostato Interno Freddo'
+			THEN
+				IF
+					MONTH(data_registrazione) <= 2
+                    OR
+                    MONTH(data_registrazione) >= 11
+                THEN
+					SET valore = 0;
+				ELSEIF
+					MONTH(data_registrazione) = 3
+				THEN
+					SET valore = 15;
+				ELSEIF
+					MONTH(data_registrazione) = 4
+				THEN
+					SET valore = 20;
+				ELSEIF
+					MONTH(data_registrazione) = 5
+				THEN
+					SET valore = 25;
+				ELSEIF
+					MONTH(data_registrazione) = 6
+				THEN
+					SET valore = 30;
+				ELSEIF
+					MONTH(data_registrazione) = 7
+                    OR
+                    MONTH(data_registrazione) = 8
+				THEN
+					SET valore = 30;
+				ELSEIF
+					MONTH(data_registrazione) = 9
+                    OR
+                    MONTH(data_registrazione) = 10
+                THEN
+					SET valore = 20;
+                END IF;
+			ELSEIF
+				tipo_sensore = 'Igrometro Interno'
+                OR
+                tipo_sensore = 'Igrometro Esterno'
+            THEN
+				IF
+					(MONTH(data_registrazione) >= 1
+                     AND
+                     MONTH(data_registrazione) <= 4)
+                    OR
+                    MONTH(data_registrazione) = 11
+                    OR
+                    MONTH(data_registrazione) = 12
+                THEN
+					SET valore = 55;
+				ELSEIF
+					MONTH(data_registrazione) >= 5
+                    AND
+                    MONTH(data_registrazione) <= 8
+				THEN
+					SET valore = 45;
+				ELSEIF
+					MONTH(data_registrazione) = 9
+                    OR
+                    MONTH(data_registrazione) = 10
+                THEN
+					SET valore = 50;
+				END IF;
+			ELSEIF
+				tipo_sensore = 'Pluviometro'
+            THEN
+				IF
+					(MONTH(data_registrazione) >= 1
+                     AND
+                     MONTH(data_registrazione) <= 4)
+                    OR
+                    (MONTH(data_registrazione) >= 9
+                     AND
+                     MONTH(data_registrazione) <= 12)
+                THEN
+					SET valore = 90;
+				ELSEIF
+					MONTH(data_registrazione) = 5
+				THEN
+					SET valore = 60;
+				ELSEIF
+					MONTH(data_registrazione) >= 6
+                    AND
+                    MONTH(data_registrazione) <= 8
+                THEN
+					SET valore = 30;
+				END IF;
+            ELSEIF
+				tipo_sensore = 'Posizione'
+            THEN
+				SET valore = 0.001;
+                IF
+					(SELECT DISTINCT A.ID_Area
+                     FROM Sensore S INNER JOIN Vano V ON S.Vano = V.Codice_Vano
+								    INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
+								    INNER JOIN Edificio E ON P.Edificio = E.ID
+								    INNER JOIN AreaGeografica A ON E.Locazione = A.ID_Area
+					 WHERE S.Codice_Seriale = numero_sensore) = 020
+                     AND 
+                     data_registrazione < '2022-03-24'
+                THEN
+					SET data_registrazione = '2022-03-24';
+                END IF;
+            END IF;
+            
+            INSERT INTO Registrazione(ID_Sensore, TipoSensore, Data, Orario, ValoreRegistrato)
+            VALUES (numero_sensore, tipo_sensore, data_registrazione, '17:05:05', valore);
+            
+            SET data_registrazione = DATE_ADD(data_registrazione, INTERVAL 3 MONTH);
+        END LOOP;   
+        
+        IF
+			tipo_sensore = 'Posizione'
+        THEN
+			SET muro = (SELECT MIN(M.Codice_Muro)
+						FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice AND M.Pianta = V1.Pianta
+								    INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice AND M.Pianta = V2.Pianta
+								    INNER JOIN PosizionamentoVano PV1 ON M.V1 = PV1.Vertice 
+								    INNER JOIN PosizionamentoVano PV2 ON M.V2 = PV2.Vertice
+                                    INNER JOIN Sensore S ON S.Vano = PV1.Vano AND PV2.Vano
+                        WHERE S.Codice_Seriale = numero_sensore
+							 AND
+                              S.Categoria = 'Posizione');
+			
+            INSERT INTO Crepa(ID_Sensore, TipoSensore, Muro)
+            VALUES(numero_sensore, tipo_sensore, muro);
+        END IF;
+    END LOOP;
+    CLOSE cursore_sensori;
+END $$
+DELIMITER ;
+
+
+DROP PROCEDURE IF EXISTS Popolamento_Registrazione_Crepa2;
+DELIMITER $$
+CREATE PROCEDURE Popolamento_Registrazione_Crepa2()
+BEGIN
+	DECLARE finito INT DEFAULT 0;
+    DECLARE numero_sensore INT DEFAULT 0;
+    DECLARE tipo_sensore VARCHAR(50) DEFAULT '';
+    DECLARE data_registrazione DATE DEFAULT NULL;
+    DECLARE valore FLOAT DEFAULT 0;
+    DECLARE muro INT DEFAULT 0;
+    
+    DECLARE cursore_sensori CURSOR FOR
+		SELECT S.Codice_Seriale, S.Categoria, PE.DataFine
+        FROM Sensore S INNER JOIN Vano V ON S.Vano = V.Codice_Vano  		
+					   INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
+					   INNER JOIN ProgettoEdilizio PE ON P.Edificio = PE.ID_Progetto
+		WHERE PE.DataFine > '2019-11-01'
+			 AND 
+			  PE.DataFine <= '2020-11-01'
+			 AND
+              PE.DataFine IS NOT NULL;
+	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
+	
+    OPEN cursore_sensori;
+    ciclo: LOOP
+		FETCH cursore_sensori INTO numero_sensore, tipo_sensore, data_registrazione;
+		IF
+			finito = 1
+		THEN
+			LEAVE ciclo;
+		END IF;
+        
+        SET valore = 0;
+        SET data_registrazione = DATE_ADD(data_registrazione, INTERVAL 1 DAY);
+        
+        cicloReg: LOOP
+			IF
+				data_registrazione > '2022-11-01'
+			THEN
+				LEAVE cicloReg;
+			END IF;
+			
+			IF
+				tipo_sensore = 'Accelerometro X'
+                OR
+                tipo_sensore = 'Accelerometro Y'
+                OR
+                tipo_sensore = 'Accelerometro Z'
+            THEN 
+				SET valore = 0.00001;
+            ELSEIF
+				tipo_sensore = 'Giroscopio X'
+                OR
+                tipo_sensore = 'Giroscopio Y'
+                OR
+                tipo_sensore = 'Giroscopio Z'
+            THEN
+				SET valore = 0.000001;
+            ELSEIF
+				tipo_sensore = 'Termostato Esterno Caldo'
+                OR
+                tipo_sensore = 'Termostato Esterno Freddo'
+            THEN
+				IF
+					MONTH(data_registrazione) <= 2
+                    OR
+                    MONTH(data_registrazione) >= 11
+                THEN
+					SET valore = -5;
+				ELSEIF
+					MONTH(data_registrazione) = 3
+				THEN
+					SET valore = 15;
+				ELSEIF
+					MONTH(data_registrazione) = 4
+				THEN
+					SET valore = 20;
+				ELSEIF
+					MONTH(data_registrazione) = 5
+				THEN
+					SET valore = 25;
+				ELSEIF
+					MONTH(data_registrazione) = 6
+				THEN
+					SET valore = 30;
+				ELSEIF
+					MONTH(data_registrazione) = 7
+                    OR
+                    MONTH(data_registrazione) = 8
+				THEN
+					SET valore = 35;
+				ELSEIF
+					MONTH(data_registrazione) = 9
+                    OR
+                    MONTH(data_registrazione) = 10
+                THEN
+					SET valore = 20;
+                END IF;
+			ELSEIF
+				tipo_sensore = 'Termostato Interno Caldo'
+                OR
+                tipo_sensore = 'Termostato Interno Freddo'
+			THEN
+				IF
+					MONTH(data_registrazione) <= 2
+                    OR
+                    MONTH(data_registrazione) >= 11
+                THEN
+					SET valore = 0;
+				ELSEIF
+					MONTH(data_registrazione) = 3
+				THEN
+					SET valore = 15;
+				ELSEIF
+					MONTH(data_registrazione) = 4
+				THEN
+					SET valore = 20;
+				ELSEIF
+					MONTH(data_registrazione) = 5
+				THEN
+					SET valore = 25;
+				ELSEIF
+					MONTH(data_registrazione) = 6
+				THEN
+					SET valore = 30;
+				ELSEIF
+					MONTH(data_registrazione) = 7
+                    OR
+                    MONTH(data_registrazione) = 8
+				THEN
+					SET valore = 30;
+				ELSEIF
+					MONTH(data_registrazione) = 9
+                    OR
+                    MONTH(data_registrazione) = 10
+                THEN
+					SET valore = 20;
+                END IF;
+			ELSEIF
+				tipo_sensore = 'Igrometro Interno'
+                OR
+                tipo_sensore = 'Igrometro Esterno'
+            THEN
+				IF
+					(MONTH(data_registrazione) >= 1
+                     AND
+                     MONTH(data_registrazione) <= 4)
+                    OR
+                    MONTH(data_registrazione) = 11
+                    OR
+                    MONTH(data_registrazione) = 12
+                THEN
+					SET valore = 55;
+				ELSEIF
+					MONTH(data_registrazione) >= 5
+                    AND
+                    MONTH(data_registrazione) <= 8
+				THEN
+					SET valore = 45;
+				ELSEIF
+					MONTH(data_registrazione) = 9
+                    OR
+                    MONTH(data_registrazione) = 10
+                THEN
+					SET valore = 50;
+				END IF;
+			ELSEIF
+				tipo_sensore = 'Pluviometro'
+            THEN
+				IF
+					(MONTH(data_registrazione) >= 1
+                     AND
+                     MONTH(data_registrazione) <= 4)
+                    OR
+                    (MONTH(data_registrazione) >= 9
+                     AND
+                     MONTH(data_registrazione) <= 12)
+                THEN
+					SET valore = 90;
+				ELSEIF
+					MONTH(data_registrazione) = 5
+				THEN
+					SET valore = 60;
+				ELSEIF
+					MONTH(data_registrazione) >= 6
+                    AND
+                    MONTH(data_registrazione) <= 8
+                THEN
+					SET valore = 30;
+				END IF;
+            ELSEIF
+				tipo_sensore = 'Posizione'
+            THEN
+				SET valore = 0.001;
+                IF
+					(SELECT DISTINCT A.ID_Area
+                     FROM Sensore S INNER JOIN Vano V ON S.Vano = V.Codice_Vano
+								    INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
+								    INNER JOIN Edificio E ON P.Edificio = E.ID
+								    INNER JOIN AreaGeografica A ON E.Locazione = A.ID_Area
+					 WHERE S.Codice_Seriale = numero_sensore) = 020
+                     AND 
+                     data_registrazione < '2022-03-24'
+                THEN
+					SET data_registrazione = '2022-03-24';
+                END IF;
+            END IF;
+            
+            INSERT INTO Registrazione(ID_Sensore, TipoSensore, Data, Orario, ValoreRegistrato)
+            VALUES (numero_sensore, tipo_sensore, data_registrazione, '17:05:05', valore);
+            
+            SET data_registrazione = DATE_ADD(data_registrazione, INTERVAL 3 MONTH);
+        END LOOP;   
+        
+        IF
+			tipo_sensore = 'Posizione'
+        THEN
+			SET muro = (SELECT MIN(M.Codice_Muro)
+						FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice AND M.Pianta = V1.Pianta
+								    INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice AND M.Pianta = V2.Pianta
+								    INNER JOIN PosizionamentoVano PV1 ON M.V1 = PV1.Vertice 
+								    INNER JOIN PosizionamentoVano PV2 ON M.V2 = PV2.Vertice
+                                    INNER JOIN Sensore S ON S.Vano = PV1.Vano AND PV2.Vano
+                        WHERE S.Codice_Seriale = numero_sensore
+							 AND
+                              S.Categoria = 'Posizione');
+			
+            INSERT INTO Crepa(ID_Sensore, TipoSensore, Muro)
+            VALUES(numero_sensore, tipo_sensore, muro);
+        END IF;
+    END LOOP;
+    CLOSE cursore_sensori;
+END $$
+DELIMITER ;
+
+
+DROP PROCEDURE IF EXISTS Popolamento_Registrazione_Crepa3;
+DELIMITER $$
+CREATE PROCEDURE Popolamento_Registrazione_Crepa3()
+BEGIN
+	DECLARE finito INT DEFAULT 0;
+    DECLARE numero_sensore INT DEFAULT 0;
+    DECLARE tipo_sensore VARCHAR(50) DEFAULT '';
+    DECLARE data_registrazione DATE DEFAULT NULL;
+    DECLARE valore FLOAT DEFAULT 0;
+    DECLARE muro INT DEFAULT 0;
+    
+    DECLARE cursore_sensori CURSOR FOR
+		SELECT S.Codice_Seriale, S.Categoria, PE.DataFine
+        FROM Sensore S INNER JOIN Vano V ON S.Vano = V.Codice_Vano  		
+					   INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
+					   INNER JOIN ProgettoEdilizio PE ON P.Edificio = PE.ID_Progetto
+		WHERE PE.DataFine > '2020-11-01'
+			 AND 
+			  PE.DataFine <= '2022-11-01'
+			 AND
+              PE.DataFine IS NOT NULL;
+	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
+	
+    OPEN cursore_sensori;
+    ciclo: LOOP
+		FETCH cursore_sensori INTO numero_sensore, tipo_sensore, data_registrazione;
+		IF
+			finito = 1
+		THEN
+			LEAVE ciclo;
+		END IF;
+        
+        SET valore = 0;
+        SET data_registrazione = DATE_ADD(data_registrazione, INTERVAL 1 DAY);
+        
+        cicloReg: LOOP
+			IF
+				data_registrazione > '2022-11-01'
+			THEN
+				LEAVE cicloReg;
+			END IF;
+			
+			IF
+				tipo_sensore = 'Accelerometro X'
+                OR
+                tipo_sensore = 'Accelerometro Y'
+                OR
+                tipo_sensore = 'Accelerometro Z'
+            THEN 
+				SET valore = 0.00001;
+            ELSEIF
+				tipo_sensore = 'Giroscopio X'
+                OR
+                tipo_sensore = 'Giroscopio Y'
+                OR
+                tipo_sensore = 'Giroscopio Z'
+            THEN
+				SET valore = 0.000001;
+            ELSEIF
+				tipo_sensore = 'Termostato Esterno Caldo'
+                OR
+                tipo_sensore = 'Termostato Esterno Freddo'
+            THEN
+				IF
+					MONTH(data_registrazione) <= 2
+                    OR
+                    MONTH(data_registrazione) >= 11
+                THEN
+					SET valore = -5;
+				ELSEIF
+					MONTH(data_registrazione) = 3
+				THEN
+					SET valore = 15;
+				ELSEIF
+					MONTH(data_registrazione) = 4
+				THEN
+					SET valore = 20;
+				ELSEIF
+					MONTH(data_registrazione) = 5
+				THEN
+					SET valore = 25;
+				ELSEIF
+					MONTH(data_registrazione) = 6
+				THEN
+					SET valore = 30;
+				ELSEIF
+					MONTH(data_registrazione) = 7
+                    OR
+                    MONTH(data_registrazione) = 8
+				THEN
+					SET valore = 35;
+				ELSEIF
+					MONTH(data_registrazione) = 9
+                    OR
+                    MONTH(data_registrazione) = 10
+                THEN
+					SET valore = 20;
+                END IF;
+			ELSEIF
+				tipo_sensore = 'Termostato Interno Caldo'
+                OR
+                tipo_sensore = 'Termostato Interno Freddo'
+			THEN
+				IF
+					MONTH(data_registrazione) <= 2
+                    OR
+                    MONTH(data_registrazione) >= 11
+                THEN
+					SET valore = 0;
+				ELSEIF
+					MONTH(data_registrazione) = 3
+				THEN
+					SET valore = 15;
+				ELSEIF
+					MONTH(data_registrazione) = 4
+				THEN
+					SET valore = 20;
+				ELSEIF
+					MONTH(data_registrazione) = 5
+				THEN
+					SET valore = 25;
+				ELSEIF
+					MONTH(data_registrazione) = 6
+				THEN
+					SET valore = 30;
+				ELSEIF
+					MONTH(data_registrazione) = 7
+                    OR
+                    MONTH(data_registrazione) = 8
+				THEN
+					SET valore = 30;
+				ELSEIF
+					MONTH(data_registrazione) = 9
+                    OR
+                    MONTH(data_registrazione) = 10
+                THEN
+					SET valore = 20;
+                END IF;
+			ELSEIF
+				tipo_sensore = 'Igrometro Interno'
+                OR
+                tipo_sensore = 'Igrometro Esterno'
+            THEN
+				IF
+					(MONTH(data_registrazione) >= 1
+                     AND
+                     MONTH(data_registrazione) <= 4)
+                    OR
+                    MONTH(data_registrazione) = 11
+                    OR
+                    MONTH(data_registrazione) = 12
+                THEN
+					SET valore = 55;
+				ELSEIF
+					MONTH(data_registrazione) >= 5
+                    AND
+                    MONTH(data_registrazione) <= 8
+				THEN
+					SET valore = 45;
+				ELSEIF
+					MONTH(data_registrazione) = 9
+                    OR
+                    MONTH(data_registrazione) = 10
+                THEN
+					SET valore = 50;
+				END IF;
+			ELSEIF
+				tipo_sensore = 'Pluviometro'
+            THEN
+				IF
+					(MONTH(data_registrazione) >= 1
+                     AND
+                     MONTH(data_registrazione) <= 4)
+                    OR
+                    (MONTH(data_registrazione) >= 9
+                     AND
+                     MONTH(data_registrazione) <= 12)
+                THEN
+					SET valore = 90;
+				ELSEIF
+					MONTH(data_registrazione) = 5
+				THEN
+					SET valore = 60;
+				ELSEIF
+					MONTH(data_registrazione) >= 6
+                    AND
+                    MONTH(data_registrazione) <= 8
+                THEN
+					SET valore = 30;
+				END IF;
+            ELSEIF
+				tipo_sensore = 'Posizione'
+            THEN
+				SET valore = 0.001;
+                IF
+					(SELECT DISTINCT A.ID_Area
+                     FROM Sensore S INNER JOIN Vano V ON S.Vano = V.Codice_Vano
+								    INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
+								    INNER JOIN Edificio E ON P.Edificio = E.ID
+								    INNER JOIN AreaGeografica A ON E.Locazione = A.ID_Area
+					 WHERE S.Codice_Seriale = numero_sensore) = 020
+                     AND 
+                     data_registrazione < '2022-03-24'
+                THEN
+					SET data_registrazione = '2022-03-24';
+                END IF;
+            END IF;
+            
+            INSERT INTO Registrazione(ID_Sensore, TipoSensore, Data, Orario, ValoreRegistrato)
+            VALUES (numero_sensore, tipo_sensore, data_registrazione, '17:05:05', valore);
+            
+            SET data_registrazione = DATE_ADD(data_registrazione, INTERVAL 3 MONTH);
+        END LOOP;   
+        
+        IF
+			tipo_sensore = 'Posizione'
+        THEN
+			SET muro = (SELECT MIN(M.Codice_Muro)
+						FROM Muro M INNER JOIN Vertice V1 ON M.V1 = V1.Numero_Vertice AND M.Pianta = V1.Pianta
+								    INNER JOIN Vertice V2 ON M.V2 = V2.Numero_Vertice AND M.Pianta = V2.Pianta
+								    INNER JOIN PosizionamentoVano PV1 ON M.V1 = PV1.Vertice 
+								    INNER JOIN PosizionamentoVano PV2 ON M.V2 = PV2.Vertice
+                                    INNER JOIN Sensore S ON S.Vano = PV1.Vano AND PV2.Vano
+                        WHERE S.Codice_Seriale = numero_sensore
+							 AND
+                              S.Categoria = 'Posizione');
+			
+            INSERT INTO Crepa(ID_Sensore, TipoSensore, Muro)
+            VALUES(numero_sensore, tipo_sensore, muro);
+        END IF;
+    END LOOP;
+    CLOSE cursore_sensori;
+    
+    INSERT INTO Registrazione(ID_Sensore, TipoSensore, Data, Orario, ValoreRegistrato)
+		SELECT S.Codice_Seriale, S.Categoria, '2020-03-01', '11:30:45', 0.1
+        FROM Sensore S INNER JOIN Vano V ON S.Vano = V.Codice_Vano
+					   INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
+                       INNER JOIN Edificio E ON P.Edificio = E.ID
+                       INNER JOIN AreaGeografica A ON E.Locazione = A.ID_Area
+                       INNER JOIN ProgettoEdilizio PE ON E.ID = PE.Edificio
+		WHERE (S.Categoria = 'Accelerometro X' OR S.Categoria = 'Accelerometro Y' OR S.Categoria = 'Accelerometro Z'
+			 OR
+			  S.Categoria = 'Giroscopio X' OR S.Categoria = 'Giroscopio Y' OR S.Categoria = 'Giroscopio Z')
+			 AND
+              A.ID_Area = 016
+			 AND
+              PE.DataFine < '2020-03-01'
+			 AND
+              PE.Tipo = 'Costruzione';
+
+	INSERT INTO Registrazione(ID_Sensore, TipoSensore, Data, Orario, ValoreRegistrato)
+		SELECT S.Codice_Seriale, S.Categoria, '2022-02-24', '04:44:44', 0.08
+        FROM Sensore S INNER JOIN Vano V ON S.Vano = V.Codice_Vano
+					   INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
+                       INNER JOIN Edificio E ON P.Edificio = E.ID
+                       INNER JOIN AreaGeografica A ON E.Locazione = A.ID_Area
+                       INNER JOIN ProgettoEdilizio PE ON E.ID = PE.Edificio
+		WHERE (S.Categoria = 'Accelerometro X' OR S.Categoria = 'Accelerometro Y' OR S.Categoria = 'Accelerometro Z'
+			 OR
+			  S.Categoria = 'Giroscopio X' OR S.Categoria = 'Giroscopio Y' OR S.Categoria = 'Giroscopio Z')
+			 AND
+              A.ID_Area = 020
+			 AND
+              PE.DataFine < '2022-02-24'
+			 AND
+              PE.Tipo = 'Costruzione';    
+	
 END $$
 DELIMITER ;
 
@@ -9343,3 +11679,13 @@ CALL Popolamento_Turni_CL3();
 CALL Popolamento_Turni_CL4();
 CALL Procedura_Aggiornamento_Costo_Lavori();
 CALL Popolamento_Soffitto_Pavimentazione();
+CALL Popolamento_Sensori();
+CALL Popolamento_Registrazione_Crepa1();
+CALL Popolamento_Registrazione_Crepa2();
+CALL Popolamento_Registrazione_Crepa3();
+
+UPDATE Capocantiere
+SET Pensione = TRUE
+WHERE CodiceFiscale = 'MNFBRD65S27A393X';
+
+SET SQL_SAFE_UPDATES = 1;
