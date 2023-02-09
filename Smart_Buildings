@@ -5620,7 +5620,7 @@ BEGIN
 		THEN
 			SET direzione_problema = 'n-o/s-e';
 		ELSEIF
-			coefficiente_angolare > 2.414213 OR caso_verticale = TRUE
+			coefficiente_angolare > 2.414213 OR caso_verticale = TRUE OR coefficiente_angolare <= -2.414213
 		THEN
 			SET direzione_problema = 'e-o';
 		ELSEIF
