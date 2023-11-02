@@ -10,7 +10,7 @@ USE Smart_Buildings;
 DROP TABLE IF EXISTS Edificio;
 CREATE TABLE Edificio (
 	ID INT AUTO_INCREMENT PRIMARY KEY,
-    Stato FLOAT DEFAULT 1 NOT NULL,
+    Stato FLOAT NOT NULL,
     Tipologia VARCHAR(50) NOT NULL,
 	Locazione INT NOT NULL,
     FOREIGN KEY(Locazione) REFERENCES AreaGeografica(ID_Area)
@@ -267,8 +267,8 @@ DROP TABLE IF EXISTS AltriMateriali;
 CREATE TABLE AltriMateriali(
 	Codice_Lotto VARCHAR(50) PRIMARY KEY,
     Nome VARCHAR(50) NOT NULL,
-    QuantitaComprata FLOAT NOT NULL, # IN Kg
-    QuantitaStoccata FLOAT NOT NULL, # IN Kg
+    QuantitaComprata FLOAT NOT NULL, # IN KG
+    QuantitaStoccata FLOAT NOT NULL, # IN KG
     Fornitore VARCHAR(50) NOT NULL,
     Costo FLOAT NOT NULL, # IN EURO
     DataAcquisto DATE NOT NULL
@@ -278,8 +278,8 @@ DROP TABLE IF EXISTS Intonaco;
 CREATE TABLE Intonaco(
 	Codice_Lotto VARCHAR(50) PRIMARY KEY,
     Nome VARCHAR(50) NOT NULL,
-    QuantitaComprata FLOAT NOT NULL, # IN Kg
-    QuantitaStoccata FLOAT NOT NULL, # IN Kg
+    QuantitaComprata FLOAT NOT NULL, # IN KG
+    QuantitaStoccata FLOAT NOT NULL, # IN KG
     Fornitore VARCHAR(50) NOT NULL,
     Costo FLOAT NOT NULL, # IN EURO
     DataAcquisto DATE NOT NULL,
@@ -290,8 +290,8 @@ DROP TABLE IF EXISTS Mattoni;
 CREATE TABLE Mattoni(
 	Codice_Lotto VARCHAR(50) PRIMARY KEY,
     Nome VARCHAR(50) NOT NULL,
-    QuantitaComprata FLOAT NOT NULL, # IN Kg
-    QuantitaStoccata FLOAT NOT NULL, # IN Kg
+    QuantitaComprata FLOAT NOT NULL, # IN KG
+    QuantitaStoccata FLOAT NOT NULL, # IN KG
     Fornitore VARCHAR(50) NOT NULL,
     Costo FLOAT NOT NULL, # IN EURO
     DataAcquisto DATE NOT NULL,
@@ -302,8 +302,8 @@ DROP TABLE IF EXISTS Piastrelle;
 CREATE TABLE Piastrelle(
 	Codice_Lotto VARCHAR(50) PRIMARY KEY,
     Nome VARCHAR(50) NOT NULL,
-    QuantitaComprata FLOAT NOT NULL, # IN Kg
-    QuantitaStoccata FLOAT NOT NULL, # IN Kg
+    QuantitaComprata FLOAT NOT NULL, # IN KG
+    QuantitaStoccata FLOAT NOT NULL, # IN KG
     Fornitore VARCHAR(50) NOT NULL,
     Costo FLOAT NOT NULL, # IN EURO
     DataAcquisto DATE NOT NULL,
@@ -315,8 +315,8 @@ DROP TABLE IF EXISTS Pietre;
 CREATE TABLE Pietre(
 	Codice_Lotto VARCHAR(50) PRIMARY KEY,
     Nome VARCHAR(50) NOT NULL,
-    QuantitaComprata FLOAT NOT NULL, # IN Kg
-    QuantitaStoccata FLOAT NOT NULL, # IN Kg
+    QuantitaComprata FLOAT NOT NULL, # IN KG
+    QuantitaStoccata FLOAT NOT NULL, # IN KG
     Fornitore VARCHAR(50) NOT NULL,
     Costo FLOAT NOT NULL, # IN EURO
     DataAcquisto DATE NOT NULL,
@@ -368,7 +368,7 @@ DROP TABLE IF EXISTS ImpiegoAltriMateriali;
 CREATE TABLE ImpiegoAltriMateriali(
 	Lavoro INT,
 	Lotto_Altri_Materiali VARCHAR(50),
-    Quantita FLOAT NOT NULL, # IN Kg
+    Quantita FLOAT NOT NULL, # IN KG
     PRIMARY KEY(Lavoro, Lotto_Altri_Materiali),
     FOREIGN KEY(Lotto_Altri_Materiali) REFERENCES AltriMateriali(Codice_Lotto)
 		ON DELETE NO ACTION
@@ -382,7 +382,7 @@ DROP TABLE IF EXISTS ImpiegoIntonaco;
 CREATE TABLE ImpiegoIntonaco(
 	Lavoro INT,
 	Lotto_Intonaco VARCHAR(50),
-	Quantita FLOAT NOT NULL, # IN Kg
+	Quantita FLOAT NOT NULL, # IN KG
     PRIMARY KEY(Lavoro, Lotto_Intonaco),
     FOREIGN KEY(Lotto_Intonaco) REFERENCES Intonaco(Codice_Lotto)
 		ON DELETE NO ACTION
@@ -396,7 +396,7 @@ DROP TABLE IF EXISTS ImpiegoMattoni;
 CREATE TABLE ImpiegoMattoni(
 	Lavoro INT,
 	Lotto_Mattoni VARCHAR(50),
-    Quantita FLOAT NOT NULL, # IN Kg
+    Quantita FLOAT NOT NULL, # IN KG
     PRIMARY KEY(Lavoro, Lotto_Mattoni),
     FOREIGN KEY(Lotto_Mattoni) REFERENCES Mattoni(Codice_Lotto)
 		ON DELETE NO ACTION
@@ -410,7 +410,7 @@ DROP TABLE IF EXISTS ImpiegoPiastrelle;
 CREATE TABLE ImpiegoPiastrelle(
 	Lavoro INT,
 	Lotto_Piastrelle VARCHAR(50),
-    Quantita FLOAT NOT NULL, # IN Kg
+    Quantita FLOAT NOT NULL, # IN KG
     PRIMARY KEY(Lavoro, Lotto_Piastrelle),
     FOREIGN KEY(Lotto_Piastrelle) REFERENCES Piastrelle(Codice_Lotto)
 		ON DELETE NO ACTION
@@ -424,7 +424,7 @@ DROP TABLE IF EXISTS ImpiegoPietre;
 CREATE TABLE ImpiegoPietre(
 	Lavoro INT,
 	Lotto_Pietre VARCHAR(50),
-    Quantita FLOAT NOT NULL, # IN Kg
+    Quantita FLOAT NOT NULL, # IN KG
     PRIMARY KEY(Lavoro, Lotto_Pietre),
     FOREIGN KEY(Lotto_Pietre) REFERENCES Pietre(Codice_Lotto)
 		ON DELETE NO ACTION
@@ -583,7 +583,7 @@ BEGIN
 END $$
 DELIMITER ;
 
-DROP FUNCTION IF EXISTS Massimo
+DROP FUNCTION IF EXISTS Massimo;
 DELIMITER $$
 CREATE FUNCTION Massimo(x FLOAT, y FLOAT)
 RETURNS FLOAT DETERMINISTIC
@@ -681,6 +681,39 @@ BEGIN
 	DECLARE intersezione BOOL DEFAULT FALSE;
 	DECLARE m, q, _m, _q FLOAT DEFAULT 0;
 	DECLARE x_inter, y_inter FLOAT DEFAULT 0;
+    DECLARE cambio FLOAT DEFAULT 0;
+    
+    IF
+		x1 > x2
+    THEN
+		SET cambio = x2;
+        SET x2 = x1;
+        SET x1 = cambio;
+    END IF;
+    
+    IF
+		x3 > x4
+    THEN
+		SET cambio = x3;
+        SET x3 = x4;
+        SET x4 = cambio;
+    END IF;
+    
+    IF
+		y1 > y2
+    THEN
+		SET cambio = y2;
+        SET y2 = y1;
+        SET y1 = cambio;
+    END IF;
+    
+    IF
+		y3 > y4
+    THEN
+		SET cambio = y3;
+        SET y3 = y4;
+        SET y4 = cambio;
+    END IF;
     
 	IF 
 		x1 <> x2 AND x3 <> x4
@@ -763,10 +796,12 @@ BEGIN
 	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finito = 1;
     
     DROP TABLE IF EXISTS TEMP_Vertici_Intersezione;
+    
 	CREATE TABLE TEMP_Vertici_Intersezione
 	(
 		X FLOAT NOT NULL,
-		Y FLOAT NOT NULL
+		Y FLOAT NOT NULL,
+        PRIMARY KEY(X, Y)
 	);
     
     OPEN vertici;
@@ -776,7 +811,7 @@ BEGIN
         IF finito = 1 THEN LEAVE ciclo; END IF;
         
         IF
-			Intersezione_con_estremi(v1_x, v1_y, v2_x, v2_y, x, y, Minimo(v1_x, v2_x) + 65535, Massimo(v1_y, v2_y) + 65535) = TRUE
+			Intersezione_con_estremi(v1_x, v1_y, v2_x, v2_y, x, y, Massimo(v1_x, v2_x) + 0.0001, y) = TRUE
 		THEN
 			IF
 				(v1_x NOT IN (
@@ -809,7 +844,7 @@ BEGIN
 								SELECT VI.X
 								FROM TEMP_Vertici_Intersezione VI
 							)
-					AND
+					OR
 					v1_y IN (
 								SELECT VI.Y
 								FROM TEMP_Vertici_Intersezione VI
@@ -822,7 +857,7 @@ BEGIN
 								SELECT VI.X
 								FROM TEMP_Vertici_Intersezione VI
 							)
-					AND
+					OR
 					v2_y IN (
 								SELECT VI.Y
 								FROM TEMP_Vertici_Intersezione VI
@@ -831,7 +866,7 @@ BEGIN
 					INSERT INTO TEMP_Vertici_Intersezione(X, Y)
 					VALUES (v1_x, v1_y);
                 END IF;
-            END IF;        
+            END IF;
 		END IF;
     END LOOP;
     CLOSE vertici;
@@ -1065,26 +1100,10 @@ BEFORE INSERT ON Pianta
 FOR EACH ROW
 BEGIN    
     IF
-		NEW.NumeroPiano < -1
+		NEw.NumeroPiano < -1
 	THEN
 		SIGNAL SQLSTATE '45000'
 		SET MESSAGE_TEXT = 'Impossibile inserire! Il numero del Piano deve essere maggiore o uguale a -1.';
-    END IF;
-    
-    IF
-		EXISTS
-			  (
-				SELECT *
-                FROM Pianta P
-                WHERE P.NumeroPiano = NEW.NumeroPiano
-					 AND
-                      P.Edificio = NEW.Edificio
-					 AND
-                      P.Codice_Pianta <> NEW.Codice_Pianta
-			  )
-	THEN
-		SIGNAL SQLSTATE '45000'
-		SET MESSAGE_TEXT = 'Impossibile inserire! Piano già inserito!';
     END IF;
 END $$
 DELIMITER ;
@@ -1097,26 +1116,10 @@ BEFORE UPDATE ON Pianta
 FOR EACH ROW
 BEGIN    
     IF
-		NEW.NumeroPiano < -1
+		NEw.NumeroPiano < -1
 	THEN
 		SIGNAL SQLSTATE '45000'
 		SET MESSAGE_TEXT = 'Impossibile aggiornare! Il numero del Piano deve essere maggiore o uguale a 0.';
-    END IF;
-    
-        IF
-		EXISTS
-			  (
-				SELECT *
-                FROM Pianta P
-                WHERE P.NumeroPiano = NEW.NumeroPiano
-					 AND
-                      P.Edificio = NEW.Edificio
-					 AND
-                      P.Codice_Pianta <> NEW.Codice_Pianta
-			  )
-	THEN
-		SIGNAL SQLSTATE '45000'
-		SET MESSAGE_TEXT = 'Impossibile aggiornare! Piano già inserito!';
     END IF;
 END $$
 DELIMITER ;
@@ -1741,14 +1744,9 @@ BEGIN
         AND
         NEW.Tipo = 'Riparazione'
 	THEN
-        UPDATE Danno
-        SET Riparato = TRUE
-        WHERE Codice_Danno = (SELECT DISTINCT R.Danno
-							  FROM ProgettoEdilizio PE INNER JOIN Lavoro L ON PE.ID_Progetto = L.Progetto
-								  					   INNER JOIN Ristrutturazione R ON L.Codice_Lavoro = R.Lavoro
-							  WHERE PE.ID_Progetto = NEW.ID_Progetto
-								   AND
-									PE.Tipo = 'Riparazione');
+        UPDATE Edificio
+        SET Stato = 1
+        WHERE ID = NEW.Edificio;
     END IF;
 END $$
 DELIMITER ;
@@ -1767,14 +1765,9 @@ BEGIN
         AND
         NEW.Tipo = 'Riparazione'
 	THEN
-        UPDATE Danno
-        SET Riparato = TRUE
-        WHERE Codice_Danno = (SELECT DISTINCT R.Danno
-							  FROM ProgettoEdilizio PE INNER JOIN Lavoro L ON PE.ID_Progetto = L.Progetto
-								  					   INNER JOIN Ristrutturazione R ON L.Codice_Lavoro = R.Lavoro
-							  WHERE PE.ID_Progetto = NEW.ID_Progetto
-								   AND
-									PE.Tipo = 'Riparazione');
+        UPDATE Edificio
+        SET Stato = 1
+        WHERE ID = NEW.Edificio;
     END IF;
 END $$
 DELIMITER ;
@@ -4347,10 +4340,10 @@ BEGIN
          OR
          NEW.Categoria = 'Igrometro Esterno')
         AND
-        NEW.UnitaMisura <> 'Kg/m³'
+        NEW.UnitaMisura <> 'kg/m³'
     THEN
 		SIGNAL SQLSTATE '45000'
-		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. Kg/m³.';
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. kg/m³.';
 	ELSEIF
 		NEW.Categoria = 'Pluviometro'
         AND
@@ -4475,10 +4468,10 @@ BEGIN
          OR
          NEW.Categoria = 'Igrometro Esterno')
         AND
-        NEW.UnitaMisura <> 'Kg/m³'
+        NEW.UnitaMisura <> 'kg/m³'
     THEN
 		SIGNAL SQLSTATE '45000'
-		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. Kg/m³.';
+		SET MESSAGE_TEXT = 'Impossibile inserire! Unità di misura sbaglita. kg/m³.';
 	ELSEIF
 		NEW.Categoria = 'Pluviometro'
         AND
@@ -4897,17 +4890,11 @@ BEGIN
     
 	IF
 		stato + NEW.Entita < 4
-        AND
-        NEW.Riparato = FALSE
 	THEN
 		UPDATE Edificio
 		SET Stato = Stato + NEW.Entita
 		WHERE ID = NEW.Edificio;
-	ELSEIF
-		stato + NEW.Entita >= 4
-        AND
-        NEW.Riparato = FALSE
-    THEN
+	ELSE
 		UPDATE Edificio
 		SET Stato = 4
 		WHERE ID = NEW.Edificio;
@@ -4955,24 +4942,6 @@ BEGIN
 		UPDATE Edificio
 		SET Stato = Stato - (OLD.Entita - NEW.Entita)
 		WHERE ID = NEW.Edificio;
-	ELSEIF
-		NEW.Riparato = TRUE
-        AND
-        OLD.Riparato = FALSE
-    THEN
-		IF
-			stato - OLD.Entita > 1
-        THEN
-			UPDATE Edificio
-			SET Stato = Stato - OLD.Entita
-			WHERE ID = NEW.Edificio;
-        ELSEIF
-			stato - OLD.Entita <= 1
-        THEN
-			UPDATE Edificio
-			SET Stato = 1
-			WHERE ID = NEW.Edificio;	
-        END IF;
     END IF;
 END $$
 DELIMITER ;
@@ -4994,70 +4963,6 @@ BEGIN
     THEN
 		SIGNAL SQLSTATE '45000'
 		SET MESSAGE_TEXT = 'Impossibile aggiornare! Il Danno non è stato riparato.';
-    END IF;
-END $$
-DELIMITER ;
-
-# Controlla che il Danno e il Lavoro della Ristrutturazione siano sullo stesso Edificio in inserimento
-DROP TRIGGER IF EXISTS ControllaInserimentoRistrutturazione;
-DELIMITER $$
-CREATE TRIGGER ControllaInserimentoRistrutturazione
-BEFORE INSERT ON Ristrutturazione
-FOR EACH ROW
-BEGIN        
-	DECLARE edificio1, edificio2 INT DEFAULT 0;
-    
-    SET edificio1 = 
-						(
-							SELECT PE.Edificio
-                            FROM Lavoro L INNER JOIN ProgettoEdilizio PE ON L.Progetto = PE.ID_Progetto
-                            WHERE L.Codice_Lavoro = NEW.Lavoro
-						);
-	
-    SET edificio2 = 
-					    (
-							SELECT D.Edificio
-                            FROM Danno D
-                            WHERE D.Codice_Danno = NEW.Danno
-						);
-    
-	IF
-		edificio1 <> edificio2
-    THEN
-		SIGNAL SQLSTATE '45000'
-		SET MESSAGE_TEXT = 'Impossibile inserire! Danno e Lavoro in Edifici diversi.';
-    END IF;
-END $$
-DELIMITER ;
-
-# Controlla che il Danno e il Lavoro della Ristrutturazione siano sullo stesso Edificio in aggiornamento
-DROP TRIGGER IF EXISTS ControllaAggiornamentoRistrutturazione;
-DELIMITER $$
-CREATE TRIGGER ControllaAggiornamentoRistrutturazione
-BEFORE UPDATE ON Ristrutturazione
-FOR EACH ROW
-BEGIN        
-	DECLARE edificio1, edificio2 INT DEFAULT 0;
-    
-    SET edificio1 = 
-						(
-							SELECT PE.Edificio
-                            FROM Lavoro L INNER JOIN ProgettoEdilizio PE ON L.Progetto = PE.ID_Progetto
-                            WHERE L.Codice_Lavoro = NEW.Lavoro
-						);
-	
-    SET edificio2 = 
-					    (
-							SELECT D.Edificio
-                            FROM Danno D
-                            WHERE D.Codice_Danno = NEW.Danno
-						);
-    
-	IF
-		edificio1 <> edificio2
-    THEN
-		SIGNAL SQLSTATE '45000'
-		SET MESSAGE_TEXT = 'Impossibile aggiornare! Danno e Lavoro in Edifici diversi.';
     END IF;
 END $$
 DELIMITER ;
@@ -5374,7 +5279,6 @@ DROP EVENT IF EXISTS Aggiornamento_Costo_Lavori;
 CREATE EVENT Aggiornamento_Costo_Lavori
 ON SCHEDULE EVERY 1 DAY
 STARTS '2017-12-31 23:50:00'
-ON COMPLETION PRESERVE
 DO
 	CALL Procedura_Aggiornamento_Costo_Lavori();	
 
@@ -5388,142 +5292,130 @@ CREATE PROCEDURE Lotto_Conveniente(_tipologia VARCHAR(50), _materiale VARCHAR(50
 BEGIN
 	CASE
     WHEN _tipologia = 'Altri Materiali' OR _tipologia = 'AltriMateriali' THEN
-		SELECT AM.Codice_Lotto, (AM.Costo/AM.QuantitaComprata) AS Costo_in_Kg, AM.Costo, AM.QuantitaStoccata
+		SELECT AM.Codice_Lotto, AM.Costo AS Costo_in_kg
 		FROM AltriMateriali AM
 		WHERE AM.Nome = _materiale
 			 AND
-			  AM.QuantitaStoccata > 0
+			  AM.QuantitaStoccata <> 0
 			 AND
-              (AM.Costo/AM.QuantitaComprata) IN (SELECT MIN(D.Costo_in_Kg)
-											     FROM (SELECT AM1.Costo/AM1.QuantitaComprata AS Costo_in_Kg, AM1.Nome, AM1.QuantitaStoccata
-													   FROM AltriMateriali AM1) AS D
-											     WHERE AM.Nome = D.Nome
-												      AND
-												       D.QuantitaStoccata > 0);
+              AM.Costo IN (SELECT MIN(AM1.Costo)
+						   FROM AltriMateriali AM1
+						   WHERE AM.Nome = AM1.Nome
+							    AND
+								 AM1.QuantitaStoccata <> 0);
                                        
-	WHEN _tipologia = 'Intonaco' OR _tipologia = 'Intonaci' THEN
-		SELECT I.Codice_Lotto, (I.Costo/I.QuantitaComprata) AS Costo_in_Kg, I.Costo, I.QuantitaStoccata
+	WHEN _tipologia = 'Intonaco' OR _tiplogia = 'Intonaci' THEN
+		SELECT I.Codice_Lotto, I.Costo AS Costo_in_kg
 		FROM Intonaco I
 		WHERE I.Nome = _materiale 
 			 AND
 			  I.QuantitaStoccata <> 0
 			 AND
-              (I.Costo/I.QuantitaComprata) IN (SELECT MIN(D.Costo_in_Kg)
-											   FROM (SELECT I1.Costo/I1.QuantitaComprata AS Costo_in_Kg, I1.Nome, I1.QuantitaStoccata
-												     FROM Intonaco I1) AS D
-											   WHERE I.Nome = D.Nome
-												    AND
-												     D.QuantitaStoccata > 0);
+              I.Costo IN (SELECT MIN(I1.Costo)
+						  FROM Intonaco I1
+						  WHERE I.Nome = I1.Nome
+							   AND
+								I1.QuantitaStoccata <> 0);
                                        
 	WHEN _tipologia = 'Mattoni' OR _tipologia = 'Mattone' THEN
-		SELECT M.Codice_Lotto, (M.Costo/M.QuantitaComprata) AS Costo_in_Kg, M.Costo, M.QuantitaStoccata
+		SELECT M.Codice_Lotto, M.Costo AS Costo_in_kg
 		FROM Mattoni M
 		WHERE M.Nome = _materiale 
 			AND
 			 M.QuantitaStoccata <> 0
 			AND
-             (M.Costo/M.QuantitaComprata) IN (SELECT MIN(D.Costo_in_Kg)
-											  FROM (SELECT M1.Costo/M1.QuantitaComprata AS Costo_in_Kg, M1.Nome, M1.QuantitaStoccata
-												    FROM Mattoni M1) AS D
-											  WHERE M.Nome = D.Nome
-												   AND
-												    D.QuantitaStoccata > 0);
-                                       
+             M.Costo IN (SELECT MIN(M1.Costo)
+						 FROM Mattoni M1
+						 WHERE M.Nome = M1.Nome
+						      AND
+                               M1.QuantitaStoccata <> 0);
 	
 	WHEN _tipologia = 'Piastrelle' OR _tipologia = 'Piastrella' THEN
-		SELECT P.Codice_Lotto, (P.Costo/P.QuantitaComprata) AS Costo_in_Kg, P.Costo, P.QuantitaStoccata
+		SELECT P.Codice_Lotto, P.Costo AS Costo_in_kg
 		FROM Piastrelle P
 		WHERE P.Nome = _materiale 
 			 AND
 			  P.QuantitaStoccata <> 0
 			 AND
-              (P.Costo/P.QuantitaComprata) IN (SELECT MIN(D.Costo_in_Kg)
-											   FROM (SELECT P1.Costo/P1.QuantitaComprata AS Costo_in_Kg, P1.Nome, P1.QuantitaStoccata
-												     FROM Piastrelle P1) AS D
-											   WHERE P.Nome = D.Nome
-												    AND
-												     D.QuantitaStoccata > 0);
-                                       
+              P.Costo IN (SELECT MIN(P1.Costo)
+						  FROM Piastrelle P1
+						  WHERE P.Nome = P1.Nome
+						       AND
+                                P1.QuantitaStoccata <> 0);
        
 	WHEN _tipologia = 'Pietre' OR _tipologia = 'Pietra' THEN
-		SELECT P.Codice_Lotto, (P.Costo/P.QuantitaComprata) AS Costo_in_Kg, P.Costo, P.QuantitaStoccata
+		SELECT P.Codice_Lotto, P.Costo AS Costo_in_kg
 		FROM Pietre P
 		WHERE P.Nome = _materiale 
 			 AND
 			  P.QuantitaStoccata <> 0
 			 AND
-              (P.Costo/P.QuantitaComprata) IN (SELECT MIN(D.Costo_in_Kg)
-											   FROM (SELECT P1.Costo/P1.QuantitaComprata AS Costo_in_Kg, P1.Nome, P1.QuantitaStoccata
-												     FROM Pietre P1) AS D
-											   WHERE P.Nome = D.Nome
-												    AND
-												     D.QuantitaStoccata > 0);
+              P.Costo IN (SELECT MIN(P1.Costo)
+						  FROM Pietre P1
+						  WHERE P.Nome = P1.Nome
+						       AND
+                                P1.QuantitaStoccata <> 0);
                                 
 	WHEN _tipologia = '' OR _tipologia = ' ' OR _tipologia IS NULL THEN
-		(SELECT AM.Codice_Lotto, (AM.Costo/AM.QuantitaComprata) AS Costo_in_Kg, AM.Costo, AM.QuantitaStoccata
+		(SELECT AM.Codice_Lotto, AM.Costo AS Costo_in_kg
 		 FROM AltriMateriali AM
 		 WHERE AM.Nome = _materiale
-			  AND
-			   AM.QuantitaStoccata > 0
-			  AND
-               (AM.Costo/AM.QuantitaComprata) IN (SELECT MIN(D.Costo_in_Kg)
-											      FROM (SELECT AM1.Costo/AM1.QuantitaComprata AS Costo_in_Kg, AM1.Nome, AM1.QuantitaStoccata
-													    FROM AltriMateriali AM1) AS D
-											      WHERE AM.Nome = D.Nome
-												       AND
-												        D.QuantitaStoccata > 0))
+			 AND
+			  AM.QuantitaStoccata <> 0
+			 AND
+              AM.Costo IN (SELECT MIN(AM1.Costo)
+						   FROM AltriMateriali AM1
+						   WHERE AM.Nome = AM1.Nome
+							    AND
+								 AM1.QuantitaStoccata <> 0))
 		UNION
-		(SELECT I.Codice_Lotto, (I.Costo/I.QuantitaComprata) AS Costo_in_Kg, I.Costo, I.QuantitaStoccata
+		(SELECT I.Codice_Lotto, I.Costo AS Costo_in_kg
 		 FROM Intonaco I
 		 WHERE I.Nome = _materiale 
 			  AND
 			   I.QuantitaStoccata <> 0
 			  AND
-               (I.Costo/I.QuantitaComprata) IN (SELECT MIN(D.Costo_in_Kg)
-											    FROM (SELECT I1.Costo/I1.QuantitaComprata AS Costo_in_Kg, I1.Nome, I1.QuantitaStoccata
-												      FROM Intonaco I1) AS D
-											    WHERE I.Nome = D.Nome
-												     AND
-												      D.QuantitaStoccata > 0))
+               I.Costo IN (SELECT MIN(I1.Costo)
+						   FROM Intonaco I1
+						   WHERE I.Nome = I1.Nome
+							    AND
+								 I1.QuantitaStoccata <> 0))
 		UNION
-		(SELECT M.Codice_Lotto, (M.Costo/M.QuantitaComprata) AS Costo_in_Kg, M.Costo, M.QuantitaStoccata
+		(SELECT M.Codice_Lotto, M.Costo AS Costo_in_kg
 		 FROM Mattoni M
 		 WHERE M.Nome = _materiale 
 			 AND
 			  M.QuantitaStoccata <> 0
 			 AND
-              (M.Costo/M.QuantitaComprata) IN (SELECT MIN(D.Costo_in_Kg)
-											   FROM (SELECT M1.Costo/M1.QuantitaComprata AS Costo_in_Kg, M1.Nome, M1.QuantitaStoccata
-												     FROM Mattoni M1) AS D
-											   WHERE M.Nome = D.Nome
-												    AND
-												     D.QuantitaStoccata > 0))
+              M.Costo IN (SELECT MIN(M1.Costo)
+						  FROM Mattoni M1
+						  WHERE M.Nome = M1.Nome
+						       AND
+                                M1.QuantitaStoccata <> 0))
 		UNION
-		(SELECT P.Codice_Lotto, (P.Costo/P.QuantitaComprata) AS Costo_in_Kg, P.Costo, P.QuantitaStoccata
+		(SELECT P.Codice_Lotto, P.Costo AS Costo_in_kg
 		 FROM Piastrelle P
 		 WHERE P.Nome = _materiale 
 			  AND
 			   P.QuantitaStoccata <> 0
 			  AND
-               (P.Costo/P.QuantitaComprata) IN (SELECT MIN(D.Costo_in_Kg)
-											    FROM (SELECT P1.Costo/P1.QuantitaComprata AS Costo_in_Kg, P1.Nome, P1.QuantitaStoccata
-												      FROM Piastrelle P1) AS D
-											    WHERE P.Nome = D.Nome
-												     AND
-												      D.QuantitaStoccata > 0))
+               P.Costo IN (SELECT MIN(P1.Costo)
+					 	   FROM Piastrelle P1
+						   WHERE P.Nome = P1.Nome
+						        AND
+                                 P1.QuantitaStoccata <> 0))
 		UNION
-		(SELECT P.Codice_Lotto, (P.Costo/P.QuantitaComprata) AS Costo_in_Kg, P.Costo, P.QuantitaStoccata
-		 FROM Pietre P
+		(SELECT P.Codice_Lotto, P.Costo AS Costo_in_kg
+		 FROM Piastrelle P
 		 WHERE P.Nome = _materiale 
 			  AND
 			   P.QuantitaStoccata <> 0
 			  AND
-               (P.Costo/P.QuantitaComprata) IN (SELECT MIN(D.Costo_in_Kg)
-											    FROM (SELECT P1.Costo/P1.QuantitaComprata AS Costo_in_Kg, P1.Nome, P1.QuantitaStoccata
-												      FROM Pietre P1) AS D
-											    WHERE P.Nome = D.Nome
-												     AND
-												      D.QuantitaStoccata > 0));	
+               P.Costo IN (SELECT MIN(P1.Costo)
+						   FROM Piastrelle P1
+						   WHERE P.Nome = P1.Nome
+						        AND
+                                 P1.QuantitaStoccata <> 0));	
                                    
 	WHEN _tipologia <> 'Altri Materiali' AND _tipologia <> 'AltriMateriali' AND _tipologia <> 'Intonaco' AND _tipologia <> 'Intonaci' AND _tipologia <> 'Mattoni' AND _tipologia <> 'Mattone' AND _tipologia <> 'Piastrelle' AND _tipologia <> 'Piastrella' AND _tipologia <> 'Pietre' AND _tipologia <> 'Pietra' AND _tipologia <> '' AND _tipologia <> ' ' AND _tipologia IS NOT NULL THEN
 		SELECT NULL;
@@ -5641,9 +5533,8 @@ DROP PROCEDURE IF EXISTS Caratteristiche_Vano;
 DELIMITER $$
 CREATE PROCEDURE Caratteristiche_Vano(cod_vano INT)
 BEGIN
-    SELECT DISTINCT V.Codice_Vano, V.Funzione, V.LunghezzaMax, V.LarghezzaMax, V.AltezzaMax, P.Nome AS Tipo_Pavimentazione, COUNT(M.Codice_Muro) AS Muri#, Calcolo_Area_Vano(cod_vano)
+    SELECT DISTINCT V.Codice_Vano, V.Funzione, V.LunghezzaMax, V.LarghezzaMax, V.AltezzaMax, COUNT(M.Codice_Muro) AS Muri#, Calcolo_Area_Vano(cod_vano)
 	FROM Vano V INNER JOIN Muro M ON V.Codice_Vano = M.Vano1 OR V.Codice_Vano = M.Vano2
-				INNER JOIN Piastrelle P ON V.Pavimentazione = P.Codice_Lotto
 	WHERE V.Codice_Vano = cod_vano
     GROUP BY V.Codice_Vano;
 END $$
@@ -5729,7 +5620,7 @@ BEGIN
 		THEN
 			SET direzione_problema = 'n-o/s-e';
 		ELSEIF
-			coefficiente_angolare > 2.414213 OR caso_verticale = TRUE OR coefficiente_angolare <= -2.414213
+			coefficiente_angolare > 2.414213 OR caso_verticale = TRUE
 		THEN
 			SET direzione_problema = 'e-o';
 		ELSEIF
@@ -6182,7 +6073,7 @@ BEGIN
 			SET n_sensori = 
 			(
 				SELECT IFNULL(COUNT(*), 0)
-				FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale AND R.TipoSensore = S.Categoria
+				FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale 
 									 INNER JOIN Vano V on V.Codice_Vano = S.Vano 
 									 INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
 									 INNER JOIN Edificio E ON P.Edificio = E.ID
@@ -6204,7 +6095,7 @@ BEGIN
 				SET n_sensori = 
 				(
 					SELECT IFNULL(COUNT(*), 0)
-					FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale AND R.TipoSensore = S.Categoria
+					FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale 
 										 INNER JOIN Vano V on V.Codice_Vano = S.Vano 
 										 INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
 										 INNER JOIN Edificio E ON P.Edificio = E.ID
@@ -6225,7 +6116,7 @@ BEGIN
 				SET n_sensori = 
 				(
 					SELECT IFNULL(COUNT(*), 0)
-					FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale AND R.TipoSensore = S.Categoria
+					FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale 
 										 INNER JOIN Vano V on V.Codice_Vano = S.Vano 
 										 INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
 										 INNER JOIN Edificio E ON P.Edificio = E.ID
@@ -6244,7 +6135,7 @@ BEGIN
 				SET n_sensori = 
 				(
 					SELECT IFNULL(COUNT(*), 0)
-					FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale AND R.TipoSensore = S.Categoria
+					FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale 
 										 INNER JOIN Vano V on V.Codice_Vano = S.Vano 
 										 INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
 										 INNER JOIN Edificio E ON P.Edificio = E.ID
@@ -6263,7 +6154,7 @@ BEGIN
 				SET n_sensori = 
 				(
 					SELECT IFNULL(COUNT(*), 0)
-					FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale AND R.TipoSensore = S.Categoria
+					FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale 
 										 INNER JOIN Vano V on V.Codice_Vano = S.Vano 
 										 INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
 										 INNER JOIN Edificio E ON P.Edificio = E.ID
@@ -6282,7 +6173,7 @@ BEGIN
 				SET n_sensori = 
 				(
 					SELECT IFNULL(COUNT(*), 0)
-					FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale AND R.TipoSensore = S.Categoria
+					FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale 
 										 INNER JOIN Vano V on V.Codice_Vano = S.Vano 
 										 INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
 										 INNER JOIN Edificio E ON P.Edificio = E.ID
@@ -6301,7 +6192,7 @@ BEGIN
 				SET n_sensori = 
 				(
 					SELECT IFNULL(COUNT(*), 0)
-					FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale AND R.TipoSensore = S.Categoria
+					FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale 
 										 INNER JOIN Vano V on V.Codice_Vano = S.Vano 
 										 INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
 										 INNER JOIN Edificio E ON P.Edificio = E.ID
@@ -6320,7 +6211,7 @@ BEGIN
 				SET n_sensori = 
 				(
 					SELECT IFNULL(COUNT(*), 0)
-							FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale AND R.TipoSensore = S.Categoria
+							FROM Registrazione R INNER JOIN Sensore S ON R.ID_Sensore = S.Codice_Seriale 
 										 INNER JOIN Vano V on V.Codice_Vano = S.Vano 
 										 INNER JOIN Pianta P ON V.Pianta = P.Codice_Pianta
 										 INNER JOIN Edificio E ON P.Edificio = E.ID
@@ -6388,42 +6279,24 @@ DELIMITER ;
 
 # Aggiornamento tempo impiegato per Tipologia di Lavoro ogni anno
 DROP EVENT IF EXISTS Aggiorna_Tempo_Per_Lavoro;
-DELIMITER $$
 CREATE EVENT Aggiorna_Tempo_Per_Lavoro
 ON SCHEDULE EVERY 1 YEAR
 STARTS '2017-12-30 23:50:00'
-ON COMPLETION PRESERVE
 DO
-BEGIN
-		SET SQL_SAFE_UPDATES = 0;
-        
 		UPDATE TipologiaLavoro
-        SET TempoStimato = (SELECT IFNULL(FLOOR(AVG(Differenza_Date_Senza_Weekend(L.DataFine, L.DataInizio))), TempoStimato)
+        SET TempoStimato = (SELECT IFNULL(FLOOR(AVG(Differenza_Date_Senza_Weekend(L.DataFine, L.DataInizio))), 0)
 							FROM Lavoro L
                             WHERE L.TipologiaDiLavoro = Nome
 								 AND
                                   YEAR(L.DataFine) = YEAR(CURRENT_DATE()));
-		
-		SET SQL_SAFE_UPDATES = 1;
-END $$
-DELIMITER ;
 
 # Aggiornamento numero massimo di Lavoratori per Capocantiere ogni anno
 DROP EVENT IF EXISTS Aggiorna_Lavoratori_Per_Capocantiere;
-DELIMITER $$
 CREATE EVENT Aggiorna_Lavoratori_Per_Capocantiere
 ON SCHEDULE EVERY 1 YEAR
 STARTS '2017-12-31 23:50:00'
-ON COMPLETION PRESERVE
 DO
-BEGIN
-		SET SQL_SAFE_UPDATES = 0;
-        
 		CALL Aggiornamento_Max_N();
-        
-        SET SQL_SAFE_UPDATES = 1;
-END $$
-DELIMITER ;
     
     
 # DATA ANALYTICS
@@ -6837,13 +6710,7 @@ BEGIN
 		
 		DROP TABLE TEMP_Dati_Raccolti;
 		
-        IF
-			delta_stato IS NULL
-        THEN
-			SELECT 'Non sono disponibili abbastanza dati per dare una valutazione' AS delta_stato;
-		ELSE
-			SELECT delta_stato;
-        END IF;       
+		SELECT delta_stato;
     END IF;
 END $$
 DELIMITER ;
@@ -6977,15 +6844,15 @@ BEGIN
 											);
 											
 		IF
-			giorni_ultima_riparazione > 730
+			giorni_ultima_riparazione > 720
 			AND
 			giorni_ultima_riparazione <= 15720
 		THEN
-			SET percentuale = percentuale + (giorni_ultima_riparazione - 730) / 1000;
+			SET percentuale = percentuale + (giorni_ultima_riparazione - 720) / 1000;
 		ELSEIF
 			giorni_ultima_riparazione > 15720
 		THEN
-			SET percentuale = percentuale + 16;
+			SET percentuale = percentuale + 15;
 		END IF;
 		
 		SET crepe_stessi_lotti =
@@ -7007,11 +6874,11 @@ BEGIN
 		IF
 			crepe_stessi_lotti >= 1
 			AND
-			crepe_stessi_lotti <= 250
+			crepe_stessi_lotti <= 2500
 		THEN
 			SET percentuale = percentuale + (crepe_stessi_lotti / 5);
 		ELSEIF
-			crepe_stessi_lotti > 250
+			crepe_stessi_lotti > 2500
 		THEN
 			SET percentuale = percentuale + 50;
 		END IF;
@@ -7458,7 +7325,7 @@ VALUES # Pianta 001
        (008, 009, 6, 8, 4, 8),
        (008, 009, 4, 8, 4, 10),
        (009, NULL, 4, 10, 6, 10),
-       (008, NULL, 4, 10, 0, 10),
+       (008, NULL, 6, 10, 0, 10),
        (008, NULL, 0, 10 ,0, 0),
        (010, NULL, 7, 0, 10, 0),
        (010, NULL, 10, 0, 10, 4),
@@ -10074,7 +9941,7 @@ BEGIN
 		INSERT INTO Sensore(Codice_Seriale, Categoria, UnitaMisura, Alert, Vano)
         VALUES (codice, 'Termostato Interno Caldo', '°C', 40, vano),
 			   (codice, 'Termostato Interno Freddo', '°C', -10, vano),
-               (codice+1, 'Igrometro Interno', 'Kg/m³', 60, vano);
+               (codice+1, 'Igrometro Interno', 'kg/m³', 60, vano);
 		
         SET codice = codice + 2;
         
@@ -10092,7 +9959,7 @@ BEGIN
                    (codice+1, 'Giroscopio Z', '°/s', 0.05, vano),
                    (codice+2, 'Termostato Esterno Caldo', '°C', 44, vano),
 				   (codice+2, 'Termostato Esterno Freddo', '°C', -20, vano),
-                   (codice+3, 'Igrometro Esterno', 'Kg/m³', 70, vano),
+                   (codice+3, 'Igrometro Esterno', 'kg/m³', 70, vano),
                    (codice+4, 'Pluviometro', 'mm', 100, vano);
 
 			SET codice = codice + 5;   
@@ -10382,6 +10249,10 @@ BEGIN
            (176, 'Giroscopio X', '2022-04-04', '04:44:44', 0.07),
            (176, 'Giroscopio Y', '2022-04-04', '04:44:44', 0.07),
            (176, 'Giroscopio Z', '2022-04-04', '04:44:44', 0.07);
+
+	UPDATE Edificio
+    SET Stato = 1
+    WHERE ID = 001 OR ID = 002;
  
     INSERT INTO Ristrutturazione(Danno, Lavoro)
 		SELECT D.Codice_Danno AS Danno, L.Codice_Lavoro AS Lavoro
@@ -10406,7 +10277,7 @@ BEGIN
 			  (C.Area = 020 AND C.Data = '2022-04-04' AND C.Orario = '04:44:44' AND D.Edificio = 003))
               AND
                C.Nome = 'Terremoto';
-
+    
     UPDATE Danno
     SET Riparato = TRUE
     WHERE Edificio = 001 OR Edificio = 002;
