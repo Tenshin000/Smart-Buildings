@@ -1,0 +1,1 @@
+Progetto fatto nel 2022 per l'esame di Basi di Dati alla facoltà di Ingegneria Informatica, dove simulavamo un Database per l'Agenzia Smart Buildings che si occupava di costruire edifici in modo monitorato e intelligente. 
